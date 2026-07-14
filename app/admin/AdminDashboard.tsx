@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatPrice, parsePrice, type Order, type OrderStatus } from "@/app/lib/orders";
 import type { Product } from "@/app/lib/products";
 import { exportOrdersPdf, exportOrdersXlsx, filterOrdersForExport, totalExportRevenue, type ExportDateFilter } from "./orderExports";
@@ -102,6 +102,11 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
   const [exportEndDate, setExportEndDate] = useState("");
   const [exportError, setExportError] = useState("");
   const [isExporting, setIsExporting] = useState<"xlsx" | "pdf" | null>(null);
+  const [isSoundEnabled, setIsSoundEnabled] = useState(false);
+  const [newOrderToast, setNewOrderToast] = useState("");
+  const knownOrderIdsRef = useRef<Set<string> | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const toastTimeoutRef = useRef<number | null>(null);
   const filteredProducts = useMemo(() => {
     const query = productSearch.trim().toLowerCase();
     const result = products.filter((product) => {
@@ -180,19 +185,95 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     };
   }, [orders, products]);
 
-  useEffect(() => {
-    let active = true;
-    fetch("/api/admin/orders")
-      .then(async (response) => {
-        const data = (await response.json()) as Order[] & { error?: string };
-        if (!response.ok) throw new Error(data.error ?? "Impossible de charger les commandes.");
-        if (active) setOrders(data);
-      })
-      .catch((error: unknown) => {
-        if (active) setOrdersError(error instanceof Error ? error.message : "Impossible de charger les commandes.");
+  const playNewOrderSound = useCallback(() => {
+    if (!isSoundEnabled || typeof window === "undefined") return;
+
+    try {
+      const context = audioContextRef.current ?? new AudioContext();
+      audioContextRef.current = context;
+      const startAt = context.currentTime;
+      const gain = context.createGain();
+      gain.gain.setValueAtTime(0.0001, startAt);
+      gain.gain.exponentialRampToValueAtTime(0.045, startAt + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.28);
+      gain.connect(context.destination);
+
+      [784, 1047].forEach((frequency, index) => {
+        const oscillator = context.createOscillator();
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(frequency, startAt + index * 0.11);
+        oscillator.connect(gain);
+        oscillator.start(startAt + index * 0.11);
+        oscillator.stop(startAt + 0.29);
       });
-    return () => { active = false; };
+    } catch (error) {
+      console.error("Impossible de jouer le son de nouvelle commande :", error);
+    }
+  }, [isSoundEnabled]);
+
+  const showNewOrderToast = useCallback((orderNumber: string) => {
+    setNewOrderToast(`Nouvelle commande reçue — ${orderNumber}`);
+    if (toastTimeoutRef.current !== null) window.clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = window.setTimeout(() => setNewOrderToast(""), 6000);
   }, []);
+
+  const refreshOrders = useCallback(async () => {
+    try {
+      const response = await fetch("/api/admin/orders", { cache: "no-store" });
+      const data = (await response.json()) as Order[] & { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Impossible de charger les commandes.");
+
+      const previousOrderIds = knownOrderIdsRef.current;
+      if (previousOrderIds) {
+        const newOrders = data.filter((order) => !previousOrderIds.has(order.id));
+        if (newOrders.length > 0) {
+          playNewOrderSound();
+          showNewOrderToast(newOrders[0].order_number);
+        }
+      }
+      knownOrderIdsRef.current = new Set(data.map((order) => order.id));
+      setOrders(data);
+      setOrdersError("");
+    } catch (error) {
+      setOrdersError(error instanceof Error ? error.message : "Impossible de charger les commandes.");
+    }
+  }, [playNewOrderSound, showNewOrderToast]);
+
+  useEffect(() => {
+    const preferenceTimeout = window.setTimeout(() => {
+      setIsSoundEnabled(window.localStorage.getItem("king-of-caps-admin-order-sound") === "enabled");
+    }, 0);
+    return () => {
+      window.clearTimeout(preferenceTimeout);
+      if (toastTimeoutRef.current !== null) window.clearTimeout(toastTimeoutRef.current);
+      void audioContextRef.current?.close();
+    };
+  }, []);
+
+  useEffect(() => {
+    void refreshOrders();
+    if (view !== "orders") return;
+    const interval = window.setInterval(() => { void refreshOrders(); }, 20_000);
+    return () => window.clearInterval(interval);
+  }, [refreshOrders, view]);
+
+  async function toggleOrderSound() {
+    if (isSoundEnabled) {
+      window.localStorage.removeItem("king-of-caps-admin-order-sound");
+      setIsSoundEnabled(false);
+      return;
+    }
+
+    try {
+      const context = audioContextRef.current ?? new AudioContext();
+      audioContextRef.current = context;
+      await context.resume();
+      window.localStorage.setItem("king-of-caps-admin-order-sound", "enabled");
+      setIsSoundEnabled(true);
+    } catch (error) {
+      setOrdersError(error instanceof Error ? error.message : "Le son ne peut pas être activé dans ce navigateur.");
+    }
+  }
 
   async function readResponse<T = Product>(response: Response) {
     const data = (await response.json()) as T & { error?: string };
@@ -349,6 +430,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-8 sm:px-6 lg:px-8">
+      {newOrderToast && <div role="status" className="fixed right-4 top-4 z-[60] max-w-[calc(100vw-2rem)] rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm font-bold text-emerald-800 shadow-xl">{newOrderToast}</div>}
       {view === "dashboard" && <div className="space-y-10">
           <section className="rounded-3xl border border-[#e5e5e5] bg-white p-5 shadow-sm sm:p-7">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
@@ -448,7 +530,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
       </div>}
 
       {view === "orders" && <section className="rounded-3xl border border-[#e5e5e5] bg-white p-5 shadow-sm sm:p-7">
-          <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-bold tracking-[0.2em] text-[#c9a227]">COMMANDES</p><h2 className="mt-2 text-3xl font-black">Gestion des commandes</h2></div><div className="flex items-center gap-3"><span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-bold text-[#a8861e]">{filteredOrders.length}</span><button type="button" onClick={() => { setIsExportOpen((current) => !current); setExportError(""); }} className="rounded-xl bg-black px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#c9a227]">Exporter</button></div></div>
+          <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-bold tracking-[0.2em] text-[#c9a227]">COMMANDES</p><h2 className="mt-2 text-3xl font-black">Gestion des commandes</h2></div><div className="flex flex-wrap items-center gap-3"><span className={`rounded-full px-3 py-1 text-sm font-bold ${isSoundEnabled ? "bg-emerald-100 text-emerald-800" : "bg-zinc-100 text-zinc-600"}`}>{isSoundEnabled ? "Son activé" : "Son désactivé"}</span><button type="button" onClick={toggleOrderSound} className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-2.5 text-sm font-bold text-black transition hover:border-[#c9a227]">{isSoundEnabled ? "Désactiver le son" : "Activer le son"}</button><span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-bold text-[#a8861e]">{filteredOrders.length}</span><button type="button" onClick={() => { setIsExportOpen((current) => !current); setExportError(""); }} className="rounded-xl bg-black px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#c9a227]">Exporter</button></div></div>
           {ordersError && <p className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{ordersError}</p>}
           <div className="mt-6 space-y-4">
             {ordersMessage && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{ordersMessage}</p>}
