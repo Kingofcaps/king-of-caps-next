@@ -1,0 +1,112 @@
+create table if not exists public.products (
+  id text primary key,
+  name text not null,
+  price text not null,
+  description text not null,
+  image text not null,
+  images jsonb not null default '[]'::jsonb,
+  brand text not null default 'King Of Caps',
+  category text not null default 'Casquette',
+  color text not null default '',
+  stock_quantity integer not null default 0 check (stock_quantity >= 0),
+  featured boolean not null default false,
+  new_arrival boolean not null default false,
+  available boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+alter table public.products enable row level security;
+
+create or replace function public.reserve_product_stock(p_product_id text, p_quantity integer)
+returns setof public.products
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_quantity is null or p_quantity < 1 then
+    raise exception 'La quantité doit être supérieure à zéro.';
+  end if;
+
+  return query
+  update public.products
+  set stock_quantity = stock_quantity - p_quantity,
+      available = (stock_quantity - p_quantity) > 0
+  where id = p_product_id
+    and available = true
+    and stock_quantity >= p_quantity
+  returning *;
+end;
+$$;
+
+create or replace function public.restore_product_stock(p_product_id text, p_quantity integer)
+returns setof public.products
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_quantity is null or p_quantity < 1 then
+    raise exception 'La quantité doit être supérieure à zéro.';
+  end if;
+
+  return query
+  update public.products
+  set stock_quantity = stock_quantity + p_quantity,
+      available = true
+  where id = p_product_id
+  returning *;
+end;
+$$;
+
+revoke all on function public.reserve_product_stock(text, integer) from public;
+revoke all on function public.restore_product_stock(text, integer) from public;
+
+with catalogue(filename, position) as (
+  select * from unnest(array[
+    '03F7904F-E211-436F-93B9-B7CB7F13925F.JPG', '0EF1B3D5-FFC1-4604-8B91-72247DE97997.JPG',
+    '14190458-B463-49F5-9384-E59CDFE43F01.JPG', '1F82954F-6CA3-4DB0-B127-C7261C43AD08.PNG',
+    '2307E095-7365-4257-BC65-BC4FBF2C002D.PNG', '23193042-BCBE-4005-8810-D50C0AD73C66.JPG',
+    '2864C411-035F-4FC5-B7BF-5FDBB12A95BE.JPG', '366A687E-7958-4C72-A51D-2EB3C08E5B7E.JPG',
+    '383B3107-01A1-479F-93FB-BD03D1A2FFB5.JPG', '3A726787-35C0-49C2-9421-CC4BBE3D84E7.PNG',
+    '3E6C1331-67A9-4896-BFC6-9A752E8BD38E.PNG', '403C5063-5760-43EC-9F33-5EAD95C11D61.JPG',
+    '43E3129F-A512-4B2B-9DAE-15B247A005FD.JPG', '4B3061CF-8682-46DE-9876-AED7B942FA48.PNG',
+    '4BA6CF97-D3D2-45C9-B713-2BBBE625780C.PNG', '506EE5DC-5AF1-46EE-AF54-51CFCF1B48CB.JPG',
+    '524A6264-2362-4169-84C5-9569CD908EB7.JPG', '53ABACE3-D5D6-42C2-9EDC-6F5CAC665083.JPG',
+    '56D16B27-713D-4878-9E06-9E04F6DA7A94.JPG', '60B84D4D-3B34-4EB9-BBBF-6DC9E9C8225E.JPG',
+    '617C5623-8EC0-40AD-95FD-816D36F732DE.PNG', '7399BE42-7F4F-4B32-B662-5907DC2D0CDA.JPG',
+    '780BB540-F997-4F2D-B4C5-A4DBB9F74589.PNG', '884F21DE-4B4F-4AD9-8873-CCADBFDD078F.PNG',
+    '8BF308F9-7BA2-4E3A-8B49-B642C64A1CD5.JPG', '8DA1825A-A332-4B52-A0EB-7FACB40CBB47.JPG',
+    '8E9835F4-3F9F-467F-9B33-FDB6E8EE5A61.JPG', '92B0BA0C-19EC-4FBA-A002-45F07E10F2E2.JPG',
+    '9E23F993-2B9C-42C5-BF07-81434704F950.PNG', '9E726887-140F-4117-AA6D-4A73F267CD1B.JPG',
+    '9FE92AA6-B929-4506-856D-1A970763126A.JPG', 'A864E1A0-D2C8-40E6-9E75-9664302C012F.JPG',
+    'A9A2897E-0C4D-4E21-A184-9E9F99C38162.PNG', 'AA4CF8AE-B18D-4997-9755-2E24125BFD27.JPG',
+    'AFAF9521-0081-4BA3-8AAC-A56CA95F1815.PNG', 'BA4CD85E-57BE-40F1-A4BD-B1A30EA7C67F.JPG',
+    'C046A227-AA1E-4449-9AC6-6312F7600456.PNG', 'C8BC006C-085D-4E15-92BA-DB9493129022.JPG',
+    'D9BDAFB1-6557-45FE-98F3-D708BACD21F0.JPG', 'DF9AB569-D283-44A6-8835-88BDA5C3DFF0.JPG',
+    'E510993F-33C2-4026-8042-77DC979422E9.JPG', 'E79CE904-DB1E-43DD-A0FC-B5912F65A04B.JPG',
+    'E9E43F05-F6D8-4D1F-80FF-FFF5307691CC.PNG', 'ED26D29F-05D2-4CF2-9650-E3ADE1B2AB96.JPG',
+    'EDB63735-C895-46FF-A400-FB9994CECF52.JPG', 'F2B92410-1E5E-4040-853F-906A75B489B8.JPG',
+    'F2E30EC5-9E79-4D8C-B8E6-3247FF827777.PNG', 'F4890CFD-4A2A-4D81-AB1D-1CBDD9466878.JPG',
+    'e72843c7-c194-4eb4-8d19-65af28495c57.JPG'
+  ]::text[]) with ordinality
+)
+insert into public.products (
+  id, name, price, description, image, images, brand, category, color, stock_quantity, featured, new_arrival, available
+)
+select
+  position::text,
+  format('Casquette #%s', position),
+  '5 000 FCFA',
+  'Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.',
+  '/images/' || filename,
+  jsonb_build_array('/images/' || filename),
+  'King Of Caps',
+  'Casquette',
+  '',
+  1,
+  false,
+  false,
+  true
+from catalogue
+on conflict (id) do nothing;

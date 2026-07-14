@@ -7,7 +7,7 @@ import {
   parsePrice,
   type PaymentMethod,
 } from "@/app/lib/orders";
-import { InsufficientStockError, reserveProductStock, restoreProductStock } from "@/app/lib/products";
+import { InsufficientStockError, getProduct, reserveProductStock } from "@/app/lib/products";
 
 export const runtime = "nodejs";
 
@@ -47,14 +47,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Veuillez compléter tous les champs obligatoires." }, { status: 400 });
     }
 
-    let stockReserved = false;
-    let orderCreated = false;
-    let productIdWithReservedStock = "";
-
     try {
-      const product = await reserveProductStock(productId, quantity);
-      stockReserved = true;
-      productIdWithReservedStock = product.id;
+      const product = await getProduct(productId);
+      if (!product || !product.inStock || product.stockQuantity < quantity) {
+        throw new InsufficientStockError();
+      }
       const unitPrice = parsePrice(product.price);
       if (!unitPrice) throw new Error("Le prix du produit est invalide.");
 
@@ -77,7 +74,16 @@ export async function POST(request: Request) {
         payment_status: "pending",
         order_status: "new",
       });
-      orderCreated = true;
+
+      try {
+        await reserveProductStock(product.id, quantity);
+      } catch (stockError) {
+        console.error("Erreur de mise à jour du stock après création de commande :", stockError);
+        return NextResponse.json(
+          { success: false, error: "La commande a été créée, mais le stock n’a pas pu être mis à jour. Contactez-nous pour confirmation." },
+          { status: stockError instanceof InsufficientStockError ? 409 : 500 },
+        );
+      }
 
       try {
         await notifyNewOrder(order);
@@ -92,13 +98,6 @@ export async function POST(request: Request) {
       const checkout = await createFedaPayCheckout(order);
       return NextResponse.json({ success: true, orderNumber: order.order_number, checkoutUrl: checkout.url });
     } catch (error) {
-      if (stockReserved && !orderCreated) {
-        try {
-          await restoreProductStock(productIdWithReservedStock, quantity);
-        } catch (restoreError) {
-          console.error("Erreur de restauration du stock après échec de commande :", restoreError);
-        }
-      }
       if (error instanceof InsufficientStockError) {
         return NextResponse.json({ success: false, error: error.message }, { status: 400 });
       }
