@@ -1,50 +1,80 @@
+"use client";
+
 import Image from "next/image";
-import HomeHeader from "./components/HomeHeader";
-import ProductGallery from "./components/ProductGallery";
-import { getProducts } from "./lib/products";
+import { images } from "./lib/images";
 
-export const dynamic = "force-dynamic";
-
-export default async function Home() {
-  const products = await getProducts();
-
+export default function Home() {
   return (
-    <main className="min-h-screen bg-[#fafafa] text-black">
-      <HomeHeader />
-      <section className="relative isolate min-h-[540px] overflow-hidden text-white">
-        <Image
-          src="/images/boutique.jpg"
-          alt="Boutique King of Caps"
-          fill
-          priority
-          sizes="100vw"
-          className="object-cover"
-        />
-        <div className="absolute inset-0 bg-black/70" />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-black/40 to-[#fafafa]" />
+    <main className="min-h-screen bg-black text-white">
 
-        <div className="relative z-10 mx-auto flex min-h-[450px] max-w-4xl flex-col items-center justify-center px-5 pb-10 text-center sm:px-8">
-          <Image
-            src="/images/logo.png"
-            alt="Logo King of Caps"
-            width={176}
-            height={176}
-            priority
-            className="mb-7 h-28 w-28 rounded-full object-contain shadow-2xl sm:h-36 sm:w-36"
-          />
-          <p className="mb-3 text-xs font-bold tracking-[0.35em] text-amber-300 sm:text-sm">
-            LA RÉFÉRENCE À COTONOU
-          </p>
-          <h1 className="text-5xl font-black tracking-tight sm:text-7xl">
+  <div>className="relative h-screen bg-cover bg-center"
+        <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-5">
+          <h1 className="text-3xl font-bold tracking-widest">
             KING OF CAPS
           </h1>
-          <p className="mt-5 max-w-xl text-lg text-white/80 sm:text-xl">
-            Le royaume de la casquette au Bénin
-          </p>
+
+          <a
+            href="https://wa.me/229XXXXXXXX"
+            className="bg-white text-black px-5 py-2 rounded-full font-semibold"
+          >
+            WhatsApp
+          </a>
+        </div>
+      </header>
+
+      <section className="max-w-7xl mx-auto px-6 py-14">
+        <h2 className="text-5xl font-bold text-center mb-4">
+          Nos Casquettes
+        </h2>
+
+        <p className="text-center text-gray-400 mb-12">
+          Découvrez toute la collection King Of Caps.
+        </p>
+<div className="mb-8 flex justify-center">
+  <input
+    type="text"
+    placeholder="Rechercher une casquette..."
+    className="w-full max-w-md rounded-xl border border-gray-700 bg-zinc-900 px-4 py-3 text-white outline-none focus:border-white"
+  />
+</div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
+          {images.map((image, index) => (
+            <div
+              key={index}
+              className="bg-zinc-900 rounded-2xl overflow-hidden hover:scale-105 transition duration-300"
+            >
+              <div className="relative aspect-square">
+                <Image
+                  src={`/images/${image}`}
+                  alt={`Casquette ${index + 1}`}
+                  fill
+                  className="object-cover"
+                />
+              </div>
+
+              <div className="p-4">
+                <h3 className="font-bold text-lg">
+                  Casquette #{index + 1}
+                </h3>
+
+                <p className="text-yellow-400 text-lg font-bold mt-2">
+  5 000 FCFA
+</p>
+
+                <a
+  href={`https://wa.me/22950687515?text=${encodeURIComponent(
+    `Bonjour KING OF CAPS, je souhaite commander la Casquette #${index + 1}.`
+  )}`}
+  target="_blank"
+  className="mt-4 w-full bg-white text-black py-2 rounded-xl font-semibold text-center block"
+>
+  Commander
+</a>
+              </div>
+            </div>
+          ))}
         </div>
       </section>
-
-      <ProductGallery products={products} />
     </main>
   );
 }
