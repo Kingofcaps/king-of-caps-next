@@ -12,7 +12,7 @@ export default async function Home() {
     <main className="min-h-screen bg-[#fafafa] text-black">
       <HomeHeader />
 
-      <section className="relative isolate min-h-[540px] overflow-hidden text-white">
+      <section className="relative isolate min-h-[340px] overflow-hidden text-white">
         <Image
           src="/images/boutique.jpg"
           alt="Boutique King of Caps"
@@ -24,7 +24,7 @@ export default async function Home() {
         <div className="absolute inset-0 bg-black/70" />
         <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-black/40 to-[#fafafa]" />
 
-        <div className="relative z-10 mx-auto flex min-h-[450px] max-w-4xl flex-col items-center justify-center px-5 pb-10 text-center sm:px-8">
+        <div className="relative z-10 mx-auto flex min-h-[340px] max-w-4xl flex-col items-center justify-center px-5 pb-6 text-center sm:px-8">
           <Image
             src="/images/logo.png"
             alt="Logo King of Caps"
