@@ -1,0 +1,884 @@
+[
+  {
+    "id": "1",
+    "name": "Casquette #1",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/03F7904F-E211-436F-93B9-B7CB7F13925F.JPG",
+    "images": [
+      "/images/03F7904F-E211-436F-93B9-B7CB7F13925F.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 0,
+    "featured": false,
+    "newArrival": false,
+    "available": false,
+    "inStock": false
+  },
+  {
+    "id": "2",
+    "name": "Casquette #2",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/0EF1B3D5-FFC1-4604-8B91-72247DE97997.JPG",
+    "images": [
+      "/images/0EF1B3D5-FFC1-4604-8B91-72247DE97997.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "3",
+    "name": "Casquette #3",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/14190458-B463-49F5-9384-E59CDFE43F01.JPG",
+    "images": [
+      "/images/14190458-B463-49F5-9384-E59CDFE43F01.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "4",
+    "name": "Casquette #4",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/1F82954F-6CA3-4DB0-B127-C7261C43AD08.PNG",
+    "images": [
+      "/images/1F82954F-6CA3-4DB0-B127-C7261C43AD08.PNG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "5",
+    "name": "Casquette #5",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/2307E095-7365-4257-BC65-BC4FBF2C002D.PNG",
+    "images": [
+      "/images/2307E095-7365-4257-BC65-BC4FBF2C002D.PNG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "6",
+    "name": "Casquette #6",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/23193042-BCBE-4005-8810-D50C0AD73C66.JPG",
+    "images": [
+      "/images/23193042-BCBE-4005-8810-D50C0AD73C66.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "7",
+    "name": "Casquette #7",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/2864C411-035F-4FC5-B7BF-5FDBB12A95BE.JPG",
+    "images": [
+      "/images/2864C411-035F-4FC5-B7BF-5FDBB12A95BE.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "8",
+    "name": "Casquette #8",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/366A687E-7958-4C72-A51D-2EB3C08E5B7E.JPG",
+    "images": [
+      "/images/366A687E-7958-4C72-A51D-2EB3C08E5B7E.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "9",
+    "name": "Casquette #9",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/383B3107-01A1-479F-93FB-BD03D1A2FFB5.JPG",
+    "images": [
+      "/images/383B3107-01A1-479F-93FB-BD03D1A2FFB5.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "10",
+    "name": "Casquette #10",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/3A726787-35C0-49C2-9421-CC4BBE3D84E7.PNG",
+    "images": [
+      "/images/3A726787-35C0-49C2-9421-CC4BBE3D84E7.PNG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "11",
+    "name": "Casquette #11",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/3E6C1331-67A9-4896-BFC6-9A752E8BD38E.PNG",
+    "images": [
+      "/images/3E6C1331-67A9-4896-BFC6-9A752E8BD38E.PNG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "12",
+    "name": "Casquette #12",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/403C5063-5760-43EC-9F33-5EAD95C11D61.JPG",
+    "images": [
+      "/images/403C5063-5760-43EC-9F33-5EAD95C11D61.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "13",
+    "name": "Casquette #13",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/43E3129F-A512-4B2B-9DAE-15B247A005FD.JPG",
+    "images": [
+      "/images/43E3129F-A512-4B2B-9DAE-15B247A005FD.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "14",
+    "name": "Casquette #14",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/4B3061CF-8682-46DE-9876-AED7B942FA48.PNG",
+    "images": [
+      "/images/4B3061CF-8682-46DE-9876-AED7B942FA48.PNG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "15",
+    "name": "Casquette #15",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/4BA6CF97-D3D2-45C9-B713-2BBBE625780C.PNG",
+    "images": [
+      "/images/4BA6CF97-D3D2-45C9-B713-2BBBE625780C.PNG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "16",
+    "name": "Casquette #16",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/506EE5DC-5AF1-46EE-AF54-51CFCF1B48CB.JPG",
+    "images": [
+      "/images/506EE5DC-5AF1-46EE-AF54-51CFCF1B48CB.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "17",
+    "name": "Casquette #17",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/524A6264-2362-4169-84C5-9569CD908EB7.JPG",
+    "images": [
+      "/images/524A6264-2362-4169-84C5-9569CD908EB7.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "18",
+    "name": "Casquette #18",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/53ABACE3-D5D6-42C2-9EDC-6F5CAC665083.JPG",
+    "images": [
+      "/images/53ABACE3-D5D6-42C2-9EDC-6F5CAC665083.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "19",
+    "name": "Casquette #19",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/56D16B27-713D-4878-9E06-9E04F6DA7A94.JPG",
+    "images": [
+      "/images/56D16B27-713D-4878-9E06-9E04F6DA7A94.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "20",
+    "name": "Casquette #20",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/60B84D4D-3B34-4EB9-BBBF-6DC9E9C8225E.JPG",
+    "images": [
+      "/images/60B84D4D-3B34-4EB9-BBBF-6DC9E9C8225E.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "21",
+    "name": "Casquette #21",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/617C5623-8EC0-40AD-95FD-816D36F732DE.PNG",
+    "images": [
+      "/images/617C5623-8EC0-40AD-95FD-816D36F732DE.PNG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "22",
+    "name": "Casquette #22",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/7399BE42-7F4F-4B32-B662-5907DC2D0CDA.JPG",
+    "images": [
+      "/images/7399BE42-7F4F-4B32-B662-5907DC2D0CDA.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "23",
+    "name": "Casquette #23",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/780BB540-F997-4F2D-B4C5-A4DBB9F74589.PNG",
+    "images": [
+      "/images/780BB540-F997-4F2D-B4C5-A4DBB9F74589.PNG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "24",
+    "name": "Casquette #24",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/884F21DE-4B4F-4AD9-8873-CCADBFDD078F.PNG",
+    "images": [
+      "/images/884F21DE-4B4F-4AD9-8873-CCADBFDD078F.PNG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "25",
+    "name": "Casquette #25",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/8BF308F9-7BA2-4E3A-8B49-B642C64A1CD5.JPG",
+    "images": [
+      "/images/8BF308F9-7BA2-4E3A-8B49-B642C64A1CD5.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "26",
+    "name": "Casquette #26",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/8DA1825A-A332-4B52-A0EB-7FACB40CBB47.JPG",
+    "images": [
+      "/images/8DA1825A-A332-4B52-A0EB-7FACB40CBB47.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "27",
+    "name": "Casquette #27",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/8E9835F4-3F9F-467F-9B33-FDB6E8EE5A61.JPG",
+    "images": [
+      "/images/8E9835F4-3F9F-467F-9B33-FDB6E8EE5A61.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "28",
+    "name": "Casquette #28",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/92B0BA0C-19EC-4FBA-A002-45F07E10F2E2.JPG",
+    "images": [
+      "/images/92B0BA0C-19EC-4FBA-A002-45F07E10F2E2.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "29",
+    "name": "Casquette #29",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/9E23F993-2B9C-42C5-BF07-81434704F950.PNG",
+    "images": [
+      "/images/9E23F993-2B9C-42C5-BF07-81434704F950.PNG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "30",
+    "name": "Casquette #30",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/9E726887-140F-4117-AA6D-4A73F267CD1B.JPG",
+    "images": [
+      "/images/9E726887-140F-4117-AA6D-4A73F267CD1B.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "31",
+    "name": "Casquette #31",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/9FE92AA6-B929-4506-856D-1A970763126A.JPG",
+    "images": [
+      "/images/9FE92AA6-B929-4506-856D-1A970763126A.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "32",
+    "name": "Casquette #32",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/A864E1A0-D2C8-40E6-9E75-9664302C012F.JPG",
+    "images": [
+      "/images/A864E1A0-D2C8-40E6-9E75-9664302C012F.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "33",
+    "name": "Casquette #33",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/A9A2897E-0C4D-4E21-A184-9E9F99C38162.PNG",
+    "images": [
+      "/images/A9A2897E-0C4D-4E21-A184-9E9F99C38162.PNG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "34",
+    "name": "Casquette #34",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/AA4CF8AE-B18D-4997-9755-2E24125BFD27.JPG",
+    "images": [
+      "/images/AA4CF8AE-B18D-4997-9755-2E24125BFD27.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "35",
+    "name": "Casquette #35",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/AFAF9521-0081-4BA3-8AAC-A56CA95F1815.PNG",
+    "images": [
+      "/images/AFAF9521-0081-4BA3-8AAC-A56CA95F1815.PNG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "36",
+    "name": "Casquette #36",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/BA4CD85E-57BE-40F1-A4BD-B1A30EA7C67F.JPG",
+    "images": [
+      "/images/BA4CD85E-57BE-40F1-A4BD-B1A30EA7C67F.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "37",
+    "name": "Casquette #37",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/C046A227-AA1E-4449-9AC6-6312F7600456.PNG",
+    "images": [
+      "/images/C046A227-AA1E-4449-9AC6-6312F7600456.PNG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "38",
+    "name": "Casquette #38",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/C8BC006C-085D-4E15-92BA-DB9493129022.JPG",
+    "images": [
+      "/images/C8BC006C-085D-4E15-92BA-DB9493129022.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "39",
+    "name": "Casquette #39",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/D9BDAFB1-6557-45FE-98F3-D708BACD21F0.JPG",
+    "images": [
+      "/images/D9BDAFB1-6557-45FE-98F3-D708BACD21F0.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "40",
+    "name": "Casquette #40",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/DF9AB569-D283-44A6-8835-88BDA5C3DFF0.JPG",
+    "images": [
+      "/images/DF9AB569-D283-44A6-8835-88BDA5C3DFF0.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "41",
+    "name": "Casquette #41",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/E510993F-33C2-4026-8042-77DC979422E9.JPG",
+    "images": [
+      "/images/E510993F-33C2-4026-8042-77DC979422E9.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "42",
+    "name": "Casquette #42",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/E79CE904-DB1E-43DD-A0FC-B5912F65A04B.JPG",
+    "images": [
+      "/images/E79CE904-DB1E-43DD-A0FC-B5912F65A04B.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "43",
+    "name": "Casquette #43",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/E9E43F05-F6D8-4D1F-80FF-FFF5307691CC.PNG",
+    "images": [
+      "/images/E9E43F05-F6D8-4D1F-80FF-FFF5307691CC.PNG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "44",
+    "name": "Casquette #44",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/ED26D29F-05D2-4CF2-9650-E3ADE1B2AB96.JPG",
+    "images": [
+      "/images/ED26D29F-05D2-4CF2-9650-E3ADE1B2AB96.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "45",
+    "name": "Casquette #45",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/EDB63735-C895-46FF-A400-FB9994CECF52.JPG",
+    "images": [
+      "/images/EDB63735-C895-46FF-A400-FB9994CECF52.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "46",
+    "name": "Casquette #46",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/F2B92410-1E5E-4040-853F-906A75B489B8.JPG",
+    "images": [
+      "/images/F2B92410-1E5E-4040-853F-906A75B489B8.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "47",
+    "name": "Black SOX",
+    "price": "5 000 FCFA",
+    "description": "Casquette BlackSox arrière fermée",
+    "image": "/images/F2E30EC5-9E79-4D8C-B8E6-3247FF827777.PNG",
+    "images": [
+      "/images/F2E30EC5-9E79-4D8C-B8E6-3247FF827777.PNG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "Noire",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "48",
+    "name": "Casquette #48",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/F4890CFD-4A2A-4D81-AB1D-1CBDD9466878.JPG",
+    "images": [
+      "/images/F4890CFD-4A2A-4D81-AB1D-1CBDD9466878.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  },
+  {
+    "id": "49",
+    "name": "Casquette #49",
+    "price": "5 000 FCFA",
+    "description": "Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.",
+    "image": "/images/e72843c7-c194-4eb4-8d19-65af28495c57.JPG",
+    "images": [
+      "/images/e72843c7-c194-4eb4-8d19-65af28495c57.JPG"
+    ],
+    "brand": "King Of Caps",
+    "category": "Casquette",
+    "color": "",
+    "stockQuantity": 1,
+    "featured": false,
+    "newArrival": false,
+    "available": true,
+    "inStock": true
+  }
+]

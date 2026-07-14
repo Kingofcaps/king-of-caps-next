@@ -1,36 +1,60 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# King Of Caps
 
-## Getting Started
+Boutique Next.js avec catalogue local, administration, commandes Supabase et paiement hébergé FedaPay.
 
-First, run the development server:
+## Démarrage
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+La boutique est disponible sur `http://localhost:3000` et l’administration sur `/admin`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Variables d’environnement
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Copiez `.env.local.example` vers `.env.local`, puis remplissez les valeurs nécessaires. Ne préfixez jamais une clé secrète par `NEXT_PUBLIC_` : ces valeurs ne doivent pas atteindre le navigateur.
 
-## Learn More
+```bash
+cp .env.local.example .env.local
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Supabase
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Créez un projet Supabase.
+2. Exécutez les migrations dans cet ordre dans le SQL Editor :
+   - [création de la table orders](supabase/migrations/20260713_create_orders.sql)
+   - [numéros de commande séquentiels](supabase/migrations/20260713_add_order_number_function.sql)
+   - [permission de numérotation pour Supabase](supabase/migrations/20260713_grant_order_number_function.sql), si la migration précédente a déjà été exécutée
+3. Renseignez `NEXT_PUBLIC_SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` dans `.env.local`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+La clé `SUPABASE_SERVICE_ROLE_KEY` est exclusivement utilisée dans les routes serveur pour créer et administrer les commandes. Ne la publiez jamais dans le client ou dans Git.
 
-## Deploy on Vercel
+## FedaPay
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Ajoutez votre clé secrète et choisissez l’environnement `sandbox` ou `live` :
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```env
+FEDAPAY_SECRET_KEY=...
+FEDAPAY_ENVIRONMENT=sandbox
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
+```
+
+Configurez ensuite le webhook FedaPay vers :
+
+```text
+https://votre-domaine.com/api/payments/fedapay/webhook
+```
+
+Le webhook vérifie l’état de la transaction directement auprès de FedaPay avant de définir une commande comme payée. La page de retour de paiement ne modifie jamais ce statut.
+
+## Notifications
+
+Les nouvelles commandes déclenchent une notification Resend côté serveur après leur insertion dans Supabase. Ajoutez `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (une adresse ou un domaine vérifié dans Resend) et `ORDER_NOTIFICATION_EMAIL` dans `.env.local`. Si Resend est indisponible, la commande reste enregistrée et l’erreur est journalisée uniquement côté serveur.
+
+## Vérifications
+
+```bash
+npm run lint
+npm run build
+```
