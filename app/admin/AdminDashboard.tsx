@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 import { formatPrice, parsePrice, type Order, type OrderStatus } from "@/app/lib/orders";
 import type { Product } from "@/app/lib/products";
 import { exportOrdersPdf, exportOrdersXlsx, filterOrdersForExport, totalExportRevenue, type ExportDateFilter } from "./orderExports";
@@ -105,6 +106,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
   const [isSoundEnabled, setIsSoundEnabled] = useState(false);
   const [newOrderToast, setNewOrderToast] = useState("");
   const knownOrderIdsRef = useRef<Set<string> | null>(null);
+  const hasLoadedInitialOrdersRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
   const filteredProducts = useMemo(() => {
@@ -185,12 +187,14 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     };
   }, [orders, products]);
 
-  const playNewOrderSound = useCallback(() => {
-    if (!isSoundEnabled || typeof window === "undefined") return;
+  const playNewOrderSound = useCallback(async (force = false) => {
+    if ((!isSoundEnabled && !force) || typeof window === "undefined") return;
 
     try {
       const context = audioContextRef.current ?? new AudioContext();
       audioContextRef.current = context;
+      if (context.state === "suspended") await context.resume();
+      console.log("Playing order sound");
       const startAt = context.currentTime;
       const gain = context.createGain();
       gain.gain.setValueAtTime(0.0001, startAt);
@@ -207,7 +211,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
         oscillator.stop(startAt + 0.29);
       });
     } catch (error) {
-      console.error("Impossible de jouer le son de nouvelle commande :", error);
+      console.error("Order sound playback failed:", error);
     }
   }, [isSoundEnabled]);
 
@@ -217,27 +221,35 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     toastTimeoutRef.current = window.setTimeout(() => setNewOrderToast(""), 6000);
   }, []);
 
+  const announceNewOrder = useCallback((id: string, orderNumber: string) => {
+    const knownOrderIds = knownOrderIdsRef.current ?? new Set<string>();
+    knownOrderIdsRef.current = knownOrderIds;
+    if (knownOrderIds.has(id)) return;
+
+    knownOrderIds.add(id);
+    console.log("New order detected", orderNumber);
+    showNewOrderToast(orderNumber);
+    void playNewOrderSound();
+  }, [playNewOrderSound, showNewOrderToast]);
+
   const refreshOrders = useCallback(async () => {
     try {
       const response = await fetch("/api/admin/orders", { cache: "no-store" });
       const data = (await response.json()) as Order[] & { error?: string };
       if (!response.ok) throw new Error(data.error ?? "Impossible de charger les commandes.");
 
-      const previousOrderIds = knownOrderIdsRef.current;
-      if (previousOrderIds) {
-        const newOrders = data.filter((order) => !previousOrderIds.has(order.id));
-        if (newOrders.length > 0) {
-          playNewOrderSound();
-          showNewOrderToast(newOrders[0].order_number);
-        }
+      if (!hasLoadedInitialOrdersRef.current) {
+        knownOrderIdsRef.current = new Set(data.map((order) => order.id));
+        hasLoadedInitialOrdersRef.current = true;
+      } else {
+        data.forEach((order) => announceNewOrder(order.id, order.order_number));
       }
-      knownOrderIdsRef.current = new Set(data.map((order) => order.id));
       setOrders(data);
       setOrdersError("");
     } catch (error) {
       setOrdersError(error instanceof Error ? error.message : "Impossible de charger les commandes.");
     }
-  }, [playNewOrderSound, showNewOrderToast]);
+  }, [announceNewOrder]);
 
   useEffect(() => {
     const preferenceTimeout = window.setTimeout(() => {
@@ -251,11 +263,43 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
   }, []);
 
   useEffect(() => {
-    void refreshOrders();
-    if (view !== "orders") return;
+    const initialRefresh = window.setTimeout(() => { void refreshOrders(); }, 0);
+    if (view !== "orders") return () => window.clearTimeout(initialRefresh);
     const interval = window.setInterval(() => { void refreshOrders(); }, 20_000);
-    return () => window.clearInterval(interval);
+    return () => {
+      window.clearTimeout(initialRefresh);
+      window.clearInterval(interval);
+    };
   }, [refreshOrders, view]);
+
+  useEffect(() => {
+    if (view !== "orders") return;
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error("Supabase Realtime is unavailable: public Supabase environment variables are missing.");
+      return;
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false } });
+    const channel = supabase
+      .channel("king-of-caps-admin-orders")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders" }, (payload) => {
+        const order = payload.new as Pick<Order, "id" | "order_number">;
+        if (!order.id || !order.order_number) return;
+        announceNewOrder(order.id, order.order_number);
+        void refreshOrders();
+      })
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") console.log("Realtime subscription connected");
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") console.error("Supabase Realtime subscription failed; polling remains active.");
+      });
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [announceNewOrder, refreshOrders, view]);
 
   async function toggleOrderSound() {
     if (isSoundEnabled) {
@@ -270,6 +314,8 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
       await context.resume();
       window.localStorage.setItem("king-of-caps-admin-order-sound", "enabled");
       setIsSoundEnabled(true);
+      console.log("Order sound enabled");
+      await playNewOrderSound(true);
     } catch (error) {
       setOrdersError(error instanceof Error ? error.message : "Le son ne peut pas être activé dans ce navigateur.");
     }
