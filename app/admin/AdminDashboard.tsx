@@ -89,6 +89,8 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
   const [ordersError, setOrdersError] = useState("");
   const [ordersMessage, setOrdersMessage] = useState("");
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+  const [orderPendingDeletion, setOrderPendingDeletion] = useState<Order | null>(null);
+  const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [productSearch, setProductSearch] = useState("");
   const [productFilter, setProductFilter] = useState<ProductFilter>("all");
@@ -444,6 +446,28 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     }
   }
 
+  async function deleteOrderPermanently() {
+    if (!orderPendingDeletion || deletingOrderId) return;
+    const orderId = orderPendingDeletion.id;
+    setDeletingOrderId(orderId);
+    setOrdersError("");
+
+    try {
+      await readResponse<{ success: boolean; id: string }>(await fetch(`/api/admin/orders/${orderId}`, { method: "DELETE" }));
+      setOrders((current) => current.filter((order) => order.id !== orderId));
+      setExpandedOrderId((current) => current === orderId ? null : current);
+      setOrderPendingDeletion(null);
+      setOrdersMessage("Commande supprimée avec succès.");
+      setNewOrderToast("Commande supprimée avec succès.");
+      if (toastTimeoutRef.current !== null) window.clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = window.setTimeout(() => setNewOrderToast(""), 6000);
+    } catch {
+      setOrdersError("Impossible de supprimer la commande.");
+    } finally {
+      setDeletingOrderId(null);
+    }
+  }
+
   function resetProductControls() {
     setProductSearch("");
     setProductFilter("all");
@@ -582,7 +606,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
             {ordersMessage && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{ordersMessage}</p>}
             {isExportOpen && <section className="rounded-2xl border border-[#e5e5e5] bg-[#fafafa] p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-4"><div><h3 className="font-black">Exporter les commandes</h3><p className="mt-1 text-sm text-zinc-500">Choisissez la période puis le format du fichier.</p></div><button type="button" onClick={() => setIsExportOpen(false)} className="text-sm font-bold text-zinc-500 hover:text-black">Fermer</button></div><div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]"><label className="text-sm font-bold text-zinc-700"><span className="mb-2 block">Période</span><select value={exportDateFilter} onChange={(event) => setExportDateFilter(event.target.value as ExportDateFilter)} className="w-full rounded-xl border border-gray-300 bg-white px-3 py-3 text-sm text-black outline-none focus:border-[#c9a227] focus:ring-1 focus:ring-[#c9a227]"><option value="all">Toutes les commandes</option><option value="today">Aujourd&apos;hui</option><option value="week">Cette semaine</option><option value="month">Ce mois</option><option value="custom">Intervalle personnalisé</option></select></label>{exportDateFilter === "custom" && <><label className="text-sm font-bold text-zinc-700"><span className="mb-2 block">Du</span><input type="date" value={exportStartDate} onChange={(event) => setExportStartDate(event.target.value)} className="w-full rounded-xl border border-gray-300 bg-white px-3 py-3 text-sm text-black outline-none focus:border-[#c9a227] focus:ring-1 focus:ring-[#c9a227]" /></label><label className="text-sm font-bold text-zinc-700"><span className="mb-2 block">Au</span><input type="date" value={exportEndDate} onChange={(event) => setExportEndDate(event.target.value)} className="w-full rounded-xl border border-gray-300 bg-white px-3 py-3 text-sm text-black outline-none focus:border-[#c9a227] focus:ring-1 focus:ring-[#c9a227]" /></label></>}</div><div className="mt-5 flex flex-wrap items-center gap-3"><button type="button" disabled={isExporting !== null} onClick={() => exportOrders("xlsx")} className="rounded-xl bg-[#1d6f42] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#165a35] disabled:opacity-60">{isExporting === "xlsx" ? "Export Excel…" : "Exporter en Excel (.xlsx)"}</button><button type="button" disabled={isExporting !== null} onClick={() => exportOrders("pdf")} className="rounded-xl bg-black px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#c9a227] disabled:opacity-60">{isExporting === "pdf" ? "Export PDF…" : "Exporter en PDF"}</button><span className="text-sm font-semibold text-zinc-500">{ordersForExport.length} commande{ordersForExport.length > 1 ? "s" : ""} · Revenu : {formatPrice(totalExportRevenue(ordersForExport))}</span></div>{exportError && <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{exportError}</p>}</section>}
             <div className="rounded-2xl border border-[#e5e5e5] bg-[#fafafa] p-4"><div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center"><label><span className="sr-only">Rechercher une commande</span><input value={ordersSearch} onChange={(event) => setOrdersSearch(event.target.value)} placeholder="Rechercher par numéro, client, téléphone ou produit..." className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-black outline-none placeholder:text-gray-400 focus:border-[#c9a227] focus:ring-1 focus:ring-[#c9a227]" /></label><select value={ordersDateFilter} onChange={(event) => setOrdersDateFilter(event.target.value as OrdersDateFilter)} className="rounded-xl border border-gray-300 bg-white px-3 py-3 text-sm font-bold text-zinc-800 outline-none focus:border-[#c9a227] focus:ring-1 focus:ring-[#c9a227]"><option value="all">Toutes les dates</option><option value="today">Aujourd’hui</option><option value="last_7_days">7 derniers jours</option><option value="last_30_days">30 derniers jours</option></select><div className="flex flex-wrap gap-3"><select value={ordersSort} onChange={(event) => setOrdersSort(event.target.value as OrdersSort)} className="rounded-xl border border-gray-300 bg-white px-3 py-3 text-sm font-bold text-zinc-800 outline-none focus:border-[#c9a227] focus:ring-1 focus:ring-[#c9a227]"><option value="newest">Plus récentes</option><option value="oldest">Plus anciennes</option><option value="amount_asc">Montant croissant</option><option value="amount_desc">Montant décroissant</option></select><button type="button" onClick={resetOrderControls} className="rounded-xl border border-[#e5e5e5] bg-white px-3 py-3 text-sm font-bold text-zinc-700 transition hover:border-[#c9a227] hover:text-black">Réinitialiser</button></div></div><div className="mt-4 flex flex-wrap gap-2">{([ ["all", "Toutes"], ["new", "Nouvelles"], ["confirmed", "Confirmées"], ["preparing", "En préparation"], ["delivered", "Livrées"], ["cancelled", "Annulées"], ["payment_pending", "Paiement en attente"], ["paid", "Payées"] ] as Array<[OrdersFilter, string]>).map(([filter, label]) => <button key={filter} type="button" onClick={() => setOrdersFilter(filter)} className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${ordersFilter === filter ? "border-[#c9a227] bg-[#c9a227]/15 text-[#a8861e]" : "border-[#e5e5e5] bg-white text-zinc-600 hover:border-[#c9a227]"}`}>{label}</button>)}</div><p className="mt-4 text-sm font-semibold text-zinc-500">{filteredOrders.length} commande{filteredOrders.length > 1 ? "s" : ""} trouvée{filteredOrders.length > 1 ? "s" : ""}</p></div>
-            {filteredOrders.map((order) => <OrderCard key={order.id} order={order} isUpdating={updatingOrderId === order.id} isExpanded={expandedOrderId === order.id} onStatusChange={updateOrderStatus} onToggleDetails={() => setExpandedOrderId((current) => current === order.id ? null : order.id)} />)}
+            {filteredOrders.map((order) => <OrderCard key={order.id} order={order} isUpdating={updatingOrderId === order.id} isExpanded={expandedOrderId === order.id} onStatusChange={updateOrderStatus} onToggleDetails={() => setExpandedOrderId((current) => current === order.id ? null : order.id)} onDelete={() => setOrderPendingDeletion(order)} />)}
             {!ordersError && filteredOrders.length === 0 && <p className="rounded-xl border border-dashed border-[#e5e5e5] px-4 py-8 text-center text-zinc-500">Aucune commande dans ce filtre.</p>}
           </div>
       </section>}
@@ -609,11 +633,12 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
           </div>
         </div>
       )}
+      {orderPendingDeletion && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-5 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="delete-order-title"><div className="w-full max-w-md rounded-2xl border border-[#e5e5e5] bg-white p-6 shadow-2xl"><h2 id="delete-order-title" className="text-xl font-black">Supprimer cette commande ?</h2><p className="mt-2 text-sm text-zinc-600">Cette action est irréversible.</p><div className="mt-6 flex flex-wrap justify-end gap-3"><button type="button" disabled={deletingOrderId !== null} onClick={() => setOrderPendingDeletion(null)} className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-2.5 text-sm font-bold text-zinc-700 transition hover:border-zinc-400 disabled:opacity-60">Annuler</button><button type="button" disabled={deletingOrderId !== null} onClick={deleteOrderPermanently} className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-red-700 disabled:cursor-wait disabled:opacity-60">{deletingOrderId ? "Suppression..." : "Oui, supprimer"}</button></div></div></div>}
     </div>
   );
 }
 
-function OrderCard({ order, isUpdating, isExpanded, onStatusChange, onToggleDetails }: { order: Order; isUpdating: boolean; isExpanded: boolean; onStatusChange: (id: string, status: OrderStatus) => void; onToggleDetails: () => void }) {
+function OrderCard({ order, isUpdating, isExpanded, onStatusChange, onToggleDetails, onDelete }: { order: Order; isUpdating: boolean; isExpanded: boolean; onStatusChange: (id: string, status: OrderStatus) => void; onToggleDetails: () => void; onDelete: () => void }) {
   const whatsappUrl = orderWhatsAppUrl(order);
 
   return (
@@ -632,6 +657,7 @@ function OrderCard({ order, isUpdating, isExpanded, onStatusChange, onToggleDeta
       <div className="mt-4 flex flex-wrap items-center gap-3">
         {whatsappUrl ? <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-[#25D366] px-5 py-2 font-semibold text-white shadow hover:bg-[#1EBE5D] transition">WhatsApp</a> : <button type="button" disabled className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-zinc-200 px-5 py-2 font-semibold text-zinc-500">Téléphone indisponible</button>}
         <button type="button" onClick={onToggleDetails} className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-2 text-sm font-black text-black transition hover:border-[#c9a227] hover:text-[#a8861e]">{isExpanded ? "Masquer les détails" : "Voir les détails"}</button>
+        <button type="button" onClick={onDelete} className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-black text-red-700 transition hover:bg-red-100"><svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M6 6l1 14h10l1-14" /><path d="M10 11v5M14 11v5" /></svg>Supprimer</button>
       </div>
       {isExpanded && <dl className="mt-4 grid gap-3 rounded-xl border border-[#e5e5e5] bg-white p-4 text-sm sm:grid-cols-2"><OrderDetail label="Client" value={`${order.customer_first_name} ${order.customer_last_name}`} /><OrderDetail label="Téléphone" value={order.customer_phone} /><OrderDetail label="E-mail" value={order.customer_email || "Non renseigné"} /><OrderDetail label="Adresse" value={order.customer_address} /><OrderDetail label="Ville ou quartier" value={order.customer_city} /><OrderDetail label="Informations complémentaires" value={order.customer_note || "Aucune"} /><OrderDetail label="Produit" value={order.product_name} /><OrderDetail label="Quantité" value={String(order.quantity)} /><OrderDetail label="Total" value={formatPrice(order.total_amount)} /><OrderDetail label="Paiement" value={paymentMethodLabel(order.payment_method)} /><OrderDetail label="Statut du paiement" value={paymentStatusLabels[order.payment_status]} /><OrderDetail label="Statut de la commande" value={orderStatusLabels[order.order_status]} /><OrderDetail label="Date" value={new Date(order.created_at).toLocaleString("fr-FR")} /></dl>}
     </article>

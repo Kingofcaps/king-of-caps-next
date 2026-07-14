@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { ADMIN_COOKIE, isAdminToken } from "@/app/lib/admin-auth";
-import { getOrder, updateOrderUnlessCancelled, type OrderStatus } from "@/app/lib/orders";
+import { deleteOrder, getOrder, updateOrderUnlessCancelled, type OrderStatus } from "@/app/lib/orders";
 import { restoreProductStock } from "@/app/lib/products";
 
 export const runtime = "nodejs";
@@ -43,6 +43,24 @@ export async function PATCH(request: Request, context: RouteContext<"/api/admin/
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Impossible de modifier la commande." },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(_request: Request, context: RouteContext<"/api/admin/orders/[id]">) {
+  if (!isAdminToken((await cookies()).get(ADMIN_COOKIE)?.value)) {
+    return NextResponse.json({ error: "Non autorisé." }, { status: 401 });
+  }
+
+  try {
+    const { id } = await context.params;
+    const deletedOrder = await deleteOrder(id);
+    if (!deletedOrder) return NextResponse.json({ error: "Commande introuvable." }, { status: 404 });
+    return NextResponse.json({ success: true, id: deletedOrder.id });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Impossible de supprimer la commande." },
       { status: 500 },
     );
   }

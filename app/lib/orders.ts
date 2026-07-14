@@ -107,6 +107,17 @@ export async function getOrder(id: string) {
   return order ?? null;
 }
 
+export async function deleteOrder(id: string) {
+  const existingOrder = await getOrder(id);
+  if (!existingOrder) return null;
+
+  await supabaseRequest(`orders?id=eq.${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" },
+  });
+  return existingOrder;
+}
+
 export async function updateOrder(id: string, updates: Partial<Pick<Order, "payment_status" | "order_status">>) {
   const response = await supabaseRequest(`orders?id=eq.${encodeURIComponent(id)}`, {
     method: "PATCH",
