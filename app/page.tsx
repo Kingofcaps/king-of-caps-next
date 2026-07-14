@@ -7,7 +7,7 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-black text-white">
 
-  <div>className="relative h-screen bg-cover bg-center"
+      <header className="relative h-screen bg-cover bg-center">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-5">
           <h1 className="text-3xl font-bold tracking-widest">
             KING OF CAPS
