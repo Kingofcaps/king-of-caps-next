@@ -21,8 +21,8 @@ export default async function Home() {
           sizes="100vw"
           className="object-cover"
         />
-        <div className="absolute inset-0 bg-black/70" />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-black/40 to-[#fafafa]" />
+        <div className="absolute inset-0 bg-black/55" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/25 to-[#fafafa]/35" />
 
         <div className="relative z-10 mx-auto flex min-h-[340px] max-w-4xl flex-col items-center justify-center px-5 pb-6 text-center sm:px-8">
           <Image

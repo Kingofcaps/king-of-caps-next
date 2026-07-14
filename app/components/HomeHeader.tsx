@@ -31,7 +31,7 @@ export default function HomeHeader() {
 
   return (
     <header className="relative z-30 border-b border-[#e5e5e5] bg-white">
-      <div className="mx-auto flex min-h-[72px] max-w-7xl items-center justify-between px-5 sm:px-8">
+      <div className="mx-auto flex min-h-[48px] max-w-7xl items-center justify-between px-5 sm:px-8">
         <span className="shrink-0 whitespace-nowrap text-[11px] font-bold tracking-[0.16em] text-black sm:text-sm sm:tracking-[0.24em]">
           KING OF CAPS
         </span>
@@ -52,7 +52,7 @@ export default function HomeHeader() {
             href={WHATSAPP_URL}
             target="_blank"
             rel="noreferrer"
-            className="whitespace-nowrap rounded-full bg-black px-5 py-3 text-xs font-semibold text-white transition hover:bg-[#c9a227] sm:text-sm"
+            className="whitespace-nowrap rounded-full bg-black px-5 py-2 text-xs font-semibold text-white transition hover:bg-[#c9a227] sm:text-sm"
           >
             WhatsApp
           </a>
@@ -60,7 +60,7 @@ export default function HomeHeader() {
       </div>
 
       {isSearchOpen && (
-        <div className="fixed inset-0 z-50 bg-black/35 px-4 pt-20" onClick={closeSearch}>
+        <div className="fixed inset-0 z-50 bg-black/35 px-4 pt-14" onClick={closeSearch}>
           <div className="mx-auto flex max-w-2xl items-center gap-3 rounded-2xl border border-[#e5e5e5] bg-white px-4 py-3 shadow-2xl focus-within:border-[#c9a227]" onClick={(event) => event.stopPropagation()}>
             <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-zinc-500" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg>
             <input autoFocus type="search" value={search} onChange={(event) => updateSearch(event.target.value)} placeholder="Rechercher une casquette..." className="min-w-0 flex-1 bg-transparent text-black outline-none placeholder:text-zinc-400" />
