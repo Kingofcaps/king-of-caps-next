@@ -1,6 +1,7 @@
 import Image from "next/image";
 import HomeHeader from "./components/HomeHeader";
 import ProductGallery from "./components/ProductGallery";
+import StorefrontBottom from "./components/StorefrontBottom";
 import { getProducts } from "./lib/products";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +45,7 @@ export default async function Home() {
       </section>
 
       <ProductGallery products={products} />
+      <StorefrontBottom />
     </main>
   );
 }
