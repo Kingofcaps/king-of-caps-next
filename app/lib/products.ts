@@ -127,6 +127,23 @@ export async function getProduct(id: string) {
   return product ? toProduct(product) : undefined;
 }
 
+export async function updateProductStock(id: string, quantity: number) {
+  const stockQuantity = Math.max(0, Math.floor(quantity));
+  const response = await supabaseProductsRequest(
+    `products?id=eq.${encodeURIComponent(id)}&select=*`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        stock_quantity: stockQuantity,
+        available: stockQuantity > 0,
+      }),
+    },
+  );
+  const [product] = (await response.json()) as ProductRecord[];
+  return product ? toProduct(product) : undefined;
+}
+
 // Kept for the existing admin routes. Product persistence is now Supabase-only.
 export async function saveProducts(products: Product[]) {
   await supabaseProductsRequest("products?id=not.is.null", { method: "DELETE", headers: { Prefer: "return=minimal" } });

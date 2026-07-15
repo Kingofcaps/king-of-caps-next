@@ -39,6 +39,18 @@ function setTextField<T extends ProductForm | Product>(form: T, name: string, va
   } as T;
 }
 
+function stockColorClassName(quantity: number) {
+  if (quantity === 0) return "bg-red-100 text-red-700";
+  if (quantity <= 10) return "bg-orange-100 text-orange-800";
+  return "bg-green-100 text-green-800";
+}
+
+function stockTextClassName(quantity: number) {
+  if (quantity === 0) return "text-red-700";
+  if (quantity <= 10) return "text-orange-700";
+  return "text-green-700";
+}
+
 const paymentStatusLabels = { pending: "En attente", paid: "Payé", failed: "Échec" } as const;
 const orderStatusLabels: Record<OrderStatus, string> = { new: "Nouvelle", confirmed: "Confirmée", preparing: "En préparation", delivered: "Livrée", cancelled: "Annulée" };
 const paymentStatusClassNames: Record<Order["payment_status"], string> = {
@@ -85,6 +97,10 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
   const [editedImages, setEditedImages] = useState<File[]>([]);
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [updatingStockIds, setUpdatingStockIds] = useState<Set<string>>(new Set());
+  const [restockingProduct, setRestockingProduct] = useState<Product | null>(null);
+  const [restockQuantity, setRestockQuantity] = useState("");
+  const [restockError, setRestockError] = useState("");
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersError, setOrdersError] = useState("");
   const [ordersMessage, setOrdersMessage] = useState("");
@@ -111,6 +127,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
   const hasLoadedInitialOrdersRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
+  const updatingStockIdsRef = useRef<Set<string>>(new Set());
   const filteredProducts = useMemo(() => {
     const query = productSearch.trim().toLowerCase();
     const result = products.filter((product) => {
@@ -413,6 +430,81 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     }
   }
 
+  function setStockUpdatePending(id: string, isPending: boolean) {
+    if (isPending) updatingStockIdsRef.current.add(id);
+    else updatingStockIdsRef.current.delete(id);
+    setUpdatingStockIds(new Set(updatingStockIdsRef.current));
+  }
+
+  async function updateStock(product: Product, quantity: number, successMessage: string) {
+    if (updatingStockIdsRef.current.has(product.id)) return false;
+
+    const stockQuantity = Math.max(0, Math.floor(quantity));
+    const optimisticProduct = {
+      ...product,
+      stockQuantity,
+      available: stockQuantity > 0,
+      inStock: stockQuantity > 0,
+    };
+
+    setMessage("");
+    setStockUpdatePending(product.id, true);
+    setProducts((current) => current.map((item) => item.id === product.id ? optimisticProduct : item));
+
+    try {
+      const updatedProduct = await readResponse<Product>(
+        await fetch(`/api/admin/products/${product.id}/stock`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ stockQuantity }),
+        }),
+      );
+      setProducts((current) => current.map((item) => item.id === product.id ? updatedProduct : item));
+      setEditing((current) => current?.id === product.id ? updatedProduct : current);
+      setMessage(successMessage);
+      return true;
+    } catch (error) {
+      setProducts((current) => current.map((item) => item.id === product.id ? product : item));
+      setMessage(error instanceof Error ? error.message : "Impossible de mettre à jour le stock.");
+      return false;
+    } finally {
+      setStockUpdatePending(product.id, false);
+    }
+  }
+
+  async function changeStock(product: Product, change: -1 | 1) {
+    const stockQuantity = Math.max(0, product.stockQuantity + change);
+    if (stockQuantity === product.stockQuantity) return;
+    await updateStock(product, stockQuantity, `Stock de ${product.name} mis à jour.`);
+  }
+
+  function openRestockPopup(product: Product) {
+    setRestockingProduct(product);
+    setRestockQuantity(String(product.stockQuantity));
+    setRestockError("");
+    setMessage("");
+  }
+
+  async function restockProduct(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!restockingProduct) return;
+
+    const quantity = Number(restockQuantity);
+    if (!Number.isInteger(quantity) || quantity < 0) {
+      setRestockError("Saisissez une quantité entière supérieure ou égale à 0.");
+      return;
+    }
+
+    setRestockError("");
+    const didUpdate = await updateStock(
+      restockingProduct,
+      quantity,
+      `${restockingProduct.name} réapprovisionné à ${quantity} unité${quantity > 1 ? "s" : ""}.`,
+    );
+    if (didUpdate) setRestockingProduct(null);
+    else setRestockError("La mise à jour a échoué. Réessayez.");
+  }
+
   async function deleteProduct(id: string) {
     if (!window.confirm("Supprimer définitivement ce produit ?")) return;
     setMessage("");
@@ -577,15 +669,21 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
                         <h3 className="font-bold">{product.name}</h3>
                         <p className="mt-1 font-black text-[#c9a227]">{product.price}</p>
                       </div>
-                      <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${product.stockQuantity === 0 ? "bg-red-50 text-red-700" : product.stockQuantity <= 3 ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
-                        {product.stockQuantity === 0 ? "Rupture de stock" : product.stockQuantity <= 3 ? "Stock faible" : "En stock"}
+                      <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${stockColorClassName(product.stockQuantity)}`}>
+                        {product.stockQuantity === 0 ? "Rupture de stock" : product.stockQuantity <= 10 ? "Stock faible" : "En stock"}
                       </span>
                     </div>
                     <p className="mt-2 text-xs text-zinc-500">{product.brand || "Sans marque"} · {product.category || "Sans catégorie"}</p>
-                    <p className="mt-1 text-xs text-zinc-500">Stock : {product.stockQuantity} unité(s) · {product.images.length} image(s)</p>
+                    <p className={`mt-2 text-sm font-black ${stockTextClassName(product.stockQuantity)}`}>Stock : {product.stockQuantity} unité{product.stockQuantity > 1 ? "s" : ""}</p>
+                    <p className="mt-1 text-xs text-zinc-500">{product.images.length} image(s)</p>
                     <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-bold">
                       {product.featured && <span className="rounded-full bg-amber-100 px-2 py-1 text-[#a8861e]">À la une</span>}
                       {product.newArrival && <span className="rounded-full bg-zinc-100 px-2 py-1 text-zinc-700">Nouveau</span>}
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <button type="button" disabled={updatingStockIds.has(product.id) || product.stockQuantity === 0} onClick={() => changeStock(product, -1)} aria-label={`Diminuer le stock de ${product.name} de 1`} className="rounded-xl border border-[#e5e5e5] bg-white px-2 py-2 text-xs font-black text-zinc-700 transition hover:border-orange-300 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-40">➖ −1</button>
+                      <button type="button" disabled={updatingStockIds.has(product.id)} onClick={() => changeStock(product, 1)} aria-label={`Augmenter le stock de ${product.name} de 1`} className="rounded-xl border border-[#e5e5e5] bg-white px-2 py-2 text-xs font-black text-zinc-700 transition hover:border-green-300 hover:bg-green-50 disabled:cursor-wait disabled:opacity-40">➕ +1</button>
+                      <button type="button" disabled={updatingStockIds.has(product.id)} onClick={() => openRestockPopup(product)} className="col-span-2 rounded-xl border border-[#c9a227]/40 bg-amber-50 px-3 py-2 text-xs font-black text-[#a8861e] transition hover:border-[#c9a227] disabled:cursor-wait disabled:opacity-40">Réapprovisionner</button>
                     </div>
                     <div className="mt-3 flex gap-2">
                       <button onClick={() => { setEditing({ ...product }); setEditedImage(null); setEditedImages([]); }} className="flex-1 rounded-xl bg-black py-2 text-xs font-black text-white transition hover:bg-[#c9a227]">Modifier</button>
@@ -631,6 +729,22 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
               submitLabel={isSaving ? "Enregistrement…" : "Enregistrer les modifications"}
             />
           </div>
+        </div>
+      )}
+      {view === "products" && restockingProduct && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-5 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="restock-product-title">
+          <form onSubmit={restockProduct} className="w-full max-w-sm rounded-2xl border border-[#e5e5e5] bg-white p-6 shadow-2xl">
+            <p className="text-sm font-bold tracking-[0.2em] text-[#c9a227]">STOCK RAPIDE</p>
+            <h2 id="restock-product-title" className="mt-2 text-xl font-black">Réapprovisionner</h2>
+            <p className="mt-1 text-sm text-zinc-500">{restockingProduct.name}</p>
+            <label className="mt-5 block text-sm font-bold text-zinc-700" htmlFor="restock-quantity">Nouvelle quantité</label>
+            <input id="restock-quantity" type="number" min="0" step="1" required autoFocus value={restockQuantity} onChange={(event) => setRestockQuantity(event.target.value)} className={`${fieldClassName} mt-2`} />
+            {restockError && <p role="alert" className="mt-3 text-sm font-semibold text-red-600">{restockError}</p>}
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" disabled={updatingStockIds.has(restockingProduct.id)} onClick={() => setRestockingProduct(null)} className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-2.5 text-sm font-bold text-zinc-700 transition hover:border-zinc-400 disabled:opacity-50">Annuler</button>
+              <button type="submit" disabled={updatingStockIds.has(restockingProduct.id)} className="rounded-xl bg-black px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#c9a227] disabled:cursor-wait disabled:opacity-60">{updatingStockIds.has(restockingProduct.id) ? "Mise à jour…" : "Enregistrer"}</button>
+            </div>
+          </form>
         </div>
       )}
       {orderPendingDeletion && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-5 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="delete-order-title"><div className="w-full max-w-md rounded-2xl border border-[#e5e5e5] bg-white p-6 shadow-2xl"><h2 id="delete-order-title" className="text-xl font-black">Supprimer cette commande ?</h2><p className="mt-2 text-sm text-zinc-600">Cette action est irréversible.</p><div className="mt-6 flex flex-wrap justify-end gap-3"><button type="button" disabled={deletingOrderId !== null} onClick={() => setOrderPendingDeletion(null)} className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-2.5 text-sm font-bold text-zinc-700 transition hover:border-zinc-400 disabled:opacity-60">Annuler</button><button type="button" disabled={deletingOrderId !== null} onClick={deleteOrderPermanently} className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-red-700 disabled:cursor-wait disabled:opacity-60">{deletingOrderId ? "Suppression..." : "Oui, supprimer"}</button></div></div></div>}
