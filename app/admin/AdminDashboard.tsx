@@ -15,7 +15,19 @@ type ProductSort = "newest" | "name_asc" | "price_asc" | "price_desc" | "stock_a
 type OrdersFilter = "all" | OrderStatus | "payment_pending" | "paid";
 type OrdersDateFilter = "all" | "today" | "last_7_days" | "last_30_days";
 type OrdersSort = "newest" | "oldest" | "amount_asc" | "amount_desc";
-
+type BulkProductStatus = "idle" | "saving" | "success" | "error";
+type BulkProductDraft = {
+  clientId: string;
+  file: File;
+  previewUrl: string;
+  name: string;
+  color: string;
+  price: string;
+  stockQuantity: number;
+  description: string;
+  status: BulkProductStatus;
+  feedback: string;
+};
 const emptyProduct: ProductForm = {
   name: "",
   price: "5 000 FCFA",
@@ -101,6 +113,10 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
   const [restockingProduct, setRestockingProduct] = useState<Product | null>(null);
   const [restockQuantity, setRestockQuantity] = useState("");
   const [restockError, setRestockError] = useState("");
+  const [isBulkCreateOpen, setIsBulkCreateOpen] = useState(false);
+  const [bulkProducts, setBulkProducts] = useState<BulkProductDraft[]>([]);
+  const [isBulkSaving, setIsBulkSaving] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState("");
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersError, setOrdersError] = useState("");
   const [ordersMessage, setOrdersMessage] = useState("");
@@ -128,6 +144,18 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
   const audioContextRef = useRef<AudioContext | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
   const updatingStockIdsRef = useRef<Set<string>>(new Set());
+  const bulkFileInputRef = useRef<HTMLInputElement | null>(null);
+  const bulkProductsRef = useRef<BulkProductDraft[]>([]);
+  const bulkSubmissionRef = useRef(false);
+
+  useEffect(() => {
+    bulkProductsRef.current = bulkProducts;
+  }, [bulkProducts]);
+
+  useEffect(() => () => {
+    bulkProductsRef.current.forEach((product) => URL.revokeObjectURL(product.previewUrl));
+  }, []);
+
   const filteredProducts = useMemo(() => {
     const query = productSearch.trim().toLowerCase();
     const result = products.filter((product) => {
@@ -381,6 +409,145 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
       setMessage(error instanceof Error ? error.message : "Impossible d’ajouter le produit.");
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  function openBulkImagePicker() {
+    setIsBulkCreateOpen(true);
+    setBulkMessage("");
+    if (bulkFileInputRef.current) {
+      bulkFileInputRef.current.value = "";
+      bulkFileInputRef.current.click();
+    }
+  }
+
+  function selectBulkImages(event: ChangeEvent<HTMLInputElement>) {
+    const remainingSlots = Math.max(0, 10 - bulkProducts.length);
+    const selectedFiles = Array.from(event.target.files ?? []);
+    const files = selectedFiles.slice(0, remainingSlots);
+
+    if (files.length === 0) {
+      if (remainingSlots === 0) setBulkMessage("La limite de 10 produits est atteinte.");
+      return;
+    }
+
+    const drafts = files.map((file, index): BulkProductDraft => {
+      const filename = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim();
+      return {
+        clientId: crypto.randomUUID(),
+        file,
+        previewUrl: URL.createObjectURL(file),
+        name: filename || `Casquette ${bulkProducts.length + index + 1}`,
+        color: "",
+        price: "5000",
+        stockQuantity: 1,
+        description: "",
+        status: "idle",
+        feedback: "",
+      };
+    });
+
+    setBulkProducts((current) => [...current, ...drafts]);
+    setBulkMessage(selectedFiles.length > files.length
+      ? `Seulement ${files.length} image${files.length > 1 ? "s" : ""} ajoutée${files.length > 1 ? "s" : ""} pour respecter la limite de 10.`
+      : `${files.length} image${files.length > 1 ? "s" : ""} ajoutée${files.length > 1 ? "s" : ""}.`);
+  }
+
+  function updateBulkProduct(clientId: string, updates: Partial<Pick<BulkProductDraft, "name" | "color" | "price" | "stockQuantity" | "description">>) {
+    setBulkProducts((current) => current.map((product) => product.clientId === clientId
+      ? {
+          ...product,
+          ...updates,
+          status: product.status === "success" ? "success" : "idle",
+          feedback: product.status === "success" ? product.feedback : "",
+        }
+      : product));
+  }
+
+  function removeBulkProduct(clientId: string) {
+    const product = bulkProducts.find((item) => item.clientId === clientId);
+    if (!product || isBulkSaving) return;
+    URL.revokeObjectURL(product.previewUrl);
+    setBulkProducts((current) => current.filter((item) => item.clientId !== clientId));
+    setBulkMessage("");
+  }
+
+  async function createBulkProducts(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (bulkSubmissionRef.current) return;
+
+    const productsToCreate = bulkProducts.filter((product) => product.status !== "success");
+    if (productsToCreate.length === 0) {
+      setBulkMessage("Tous les produits de ce lot ont déjà été ajoutés.");
+      return;
+    }
+
+    bulkSubmissionRef.current = true;
+    setIsBulkSaving(true);
+    setBulkMessage("");
+    const submittedIds = new Set(productsToCreate.map((product) => product.clientId));
+    setBulkProducts((current) => current.map((product) => submittedIds.has(product.clientId)
+      ? { ...product, status: "saving", feedback: "Enregistrement…" }
+      : product));
+
+    try {
+      let successCount = 0;
+      let failureCount = 0;
+
+      for (const draft of productsToCreate) {
+        setBulkProducts((current) => current.map((product) => product.clientId === draft.clientId
+          ? { ...product, status: "saving", feedback: "Enregistrement…" }
+          : product));
+
+        try {
+          const amount = Number(draft.price.replace(/[^0-9]/g, ""));
+          if (!Number.isFinite(amount) || amount <= 0) throw new Error("Le prix doit être supérieur à 0.");
+
+          const formData = new FormData();
+          formData.set("name", draft.name);
+          formData.set("price", `${new Intl.NumberFormat("fr-FR").format(amount)} FCFA`);
+          formData.set("description", draft.description);
+          formData.set("brand", "King Of Caps");
+          formData.set("category", "Casquette");
+          formData.set("color", draft.color);
+          formData.set("stockQuantity", String(Math.max(0, Math.floor(draft.stockQuantity))));
+          formData.set("featured", "false");
+          formData.set("newArrival", "false");
+          formData.set("available", "true");
+          formData.set("image", draft.file);
+
+          const product = await readResponse<Product>(
+            await fetch("/api/admin/products", { method: "POST", body: formData }),
+          );
+          setProducts((current) => current.some((item) => item.id === product.id) ? current : [...current, product]);
+          setBulkProducts((current) => current.map((item) => item.clientId === draft.clientId
+            ? { ...item, status: "success", feedback: "Produit ajouté avec succès." }
+            : item));
+          successCount += 1;
+        } catch (error) {
+          setBulkProducts((current) => current.map((product) => product.clientId === draft.clientId
+            ? {
+                ...product,
+                status: "error",
+                feedback: error instanceof Error ? error.message : "Échec de la création.",
+              }
+            : product));
+          failureCount += 1;
+        }
+      }
+
+      setBulkMessage(failureCount === 0
+        ? `${successCount} produit${successCount > 1 ? "s" : ""} ajouté${successCount > 1 ? "s" : ""} avec succès.`
+        : `${successCount} produit${successCount > 1 ? "s" : ""} ajouté${successCount > 1 ? "s" : ""}, ${failureCount} en erreur.`);
+    } catch (error) {
+      const feedback = error instanceof Error ? error.message : "Impossible de créer ce lot de produits.";
+      setBulkProducts((current) => current.map((product) => submittedIds.has(product.clientId)
+        ? { ...product, status: "error", feedback }
+        : product));
+      setBulkMessage(feedback);
+    } finally {
+      bulkSubmissionRef.current = false;
+      setIsBulkSaving(false);
     }
   }
 
@@ -641,7 +808,63 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
               onSubmit={createProduct}
               submitLabel={isSaving ? "Enregistrement…" : "Ajouter le produit"}
             />
+            <div className="mt-6 border-t border-[#e5e5e5] pt-6">
+              <input ref={bulkFileInputRef} type="file" accept="image/*" multiple onChange={selectBulkImages} className="hidden" />
+              <button type="button" disabled={isBulkSaving || bulkProducts.length >= 10} onClick={openBulkImagePicker} className="rounded-xl border border-[#c9a227] bg-amber-50 px-4 py-2.5 text-sm font-black text-[#a8861e] transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50">Ajouter plusieurs casquettes</button>
+              <p className="mt-2 text-xs text-zinc-500">Sélectionnez jusqu’à 10 images depuis votre appareil.</p>
+            </div>
           </section>
+
+          {isBulkCreateOpen && (
+            <section className="rounded-3xl border border-[#e5e5e5] bg-white p-5 shadow-sm sm:p-7">
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <p className="text-sm font-bold tracking-[0.2em] text-[#c9a227]">CRÉATION RAPIDE</p>
+                  <h2 className="mt-2 text-2xl font-black">Ajouter plusieurs casquettes</h2>
+                  <p className="mt-2 text-sm text-zinc-500">Marque : King Of Caps · Catégorie : Casquette</p>
+                </div>
+                <button type="button" disabled={isBulkSaving || bulkProducts.length >= 10} onClick={openBulkImagePicker} className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-2.5 text-sm font-bold text-black transition hover:border-[#c9a227] disabled:cursor-not-allowed disabled:opacity-50">Ajouter des images ({bulkProducts.length}/10)</button>
+              </div>
+
+              {bulkMessage && <p role="status" className="mt-5 rounded-xl border border-[#e5e5e5] bg-[#fafafa] px-4 py-3 text-sm font-semibold text-zinc-700">{bulkMessage}</p>}
+
+              {bulkProducts.length > 0 ? (
+                <form onSubmit={createBulkProducts} className="mt-6">
+                  <div className="space-y-4">
+                    {bulkProducts.map((product, index) => {
+                      const isLocked = product.status === "saving" || product.status === "success";
+                      return (
+                        <article key={product.clientId} className={`rounded-2xl border p-4 ${product.status === "success" ? "border-green-200 bg-green-50/40" : product.status === "error" ? "border-red-200 bg-red-50/40" : "border-[#e5e5e5] bg-[#fafafa]"}`}>
+                          <div className="grid gap-4 lg:grid-cols-[120px_minmax(0,1fr)]">
+                            <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-zinc-100 lg:w-[120px]">
+                              <Image src={product.previewUrl} alt={`Aperçu ${product.name || index + 1}`} fill unoptimized sizes="120px" className="object-cover" />
+                            </div>
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                              <Field label="Nom du produit *"><input value={product.name} disabled={isLocked} onChange={(event) => updateBulkProduct(product.clientId, { name: event.target.value })} required className={fieldClassName} /></Field>
+                              <Field label="Couleur"><input value={product.color} disabled={isLocked} onChange={(event) => updateBulkProduct(product.clientId, { color: event.target.value })} className={fieldClassName} /></Field>
+                              <Field label="Prix (FCFA) *"><input type="number" min="1" step="1" value={product.price} disabled={isLocked} onChange={(event) => updateBulkProduct(product.clientId, { price: event.target.value })} required className={fieldClassName} /></Field>
+                              <Field label="Stock *"><input type="number" min="0" step="1" value={product.stockQuantity} disabled={isLocked} onChange={(event) => updateBulkProduct(product.clientId, { stockQuantity: Math.max(0, Number(event.target.value) || 0) })} required className={fieldClassName} /></Field>
+                              <div className="sm:col-span-2 lg:col-span-4"><Field label="Description (facultative)"><textarea rows={2} value={product.description} disabled={isLocked} onChange={(event) => updateBulkProduct(product.clientId, { description: event.target.value })} className={fieldClassName} /></Field></div>
+                            </div>
+                          </div>
+                          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                            <button type="button" disabled={isBulkSaving} onClick={() => removeBulkProduct(product.clientId)} className="rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-bold text-red-600 transition hover:bg-red-50 disabled:opacity-50">Supprimer cette ligne</button>
+                            {product.feedback && <p className={`text-sm font-bold ${product.status === "success" ? "text-green-700" : product.status === "error" ? "text-red-700" : "text-[#a8861e]"}`}>{product.feedback}</p>}
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-6 flex flex-wrap items-center justify-end gap-3 border-t border-[#e5e5e5] pt-5">
+                    <span className="text-sm font-semibold text-zinc-500">{bulkProducts.filter((product) => product.status !== "success").length} produit(s) à ajouter</span>
+                    <button type="submit" disabled={isBulkSaving || bulkProducts.every((product) => product.status === "success")} className="rounded-xl bg-black px-5 py-3 text-sm font-black text-white transition hover:bg-[#c9a227] disabled:cursor-wait disabled:opacity-60">{isBulkSaving ? "Ajout en cours…" : "Ajouter tous les produits"}</button>
+                  </div>
+                </form>
+              ) : (
+                <button type="button" onClick={openBulkImagePicker} className="mt-6 w-full rounded-2xl border border-dashed border-[#c9a227] bg-amber-50 px-5 py-12 text-sm font-black text-[#a8861e]">Choisir jusqu’à 10 images</button>
+              )}
+            </section>
+          )}
 
           <section>
             <div className="mb-6 rounded-2xl border border-[#e5e5e5] bg-white p-4 shadow-sm sm:p-5">
