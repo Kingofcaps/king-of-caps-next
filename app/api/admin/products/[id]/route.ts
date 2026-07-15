@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { ADMIN_COOKIE, isAdminToken } from "@/app/lib/admin-auth";
 import { getProducts, saveProducts } from "@/app/lib/products";
+import { recordStockMovementSafely } from "@/app/lib/stock-movements";
 
 export const runtime = "nodejs";
 
@@ -50,6 +51,17 @@ export async function PATCH(request: Request, context: RouteContext<"/api/admin/
 
   products[index] = nextProduct;
   await saveProducts(products);
+  if (stockQuantity !== product.stockQuantity) {
+    await recordStockMovementSafely({
+      productId: nextProduct.id,
+      productName: nextProduct.name,
+      movementType: "product_edit",
+      quantityChange: stockQuantity - product.stockQuantity,
+      previousQuantity: product.stockQuantity,
+      newQuantity: stockQuantity,
+      note: "Modification de la fiche produit",
+    });
+  }
   return NextResponse.json(nextProduct);
 }
 

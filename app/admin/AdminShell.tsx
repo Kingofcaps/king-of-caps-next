@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, LogOut, Menu, Package, ShoppingCart, Store, X } from "lucide-react";
+import { History, LayoutDashboard, LogOut, Menu, Package, ShoppingCart, Store, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 const navigation = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/products", label: "Produits", icon: Package },
   { href: "/admin/orders", label: "Commandes", icon: ShoppingCart },
+  { href: "/admin/stock-history", label: "Historique du stock", icon: History },
 ];
 
 export default function AdminShell({ children }: { children: React.ReactNode }) {

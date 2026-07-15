@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { ADMIN_COOKIE, isAdminToken } from "@/app/lib/admin-auth";
 import { deleteOrder, getOrder, updateOrderUnlessCancelled, type OrderStatus } from "@/app/lib/orders";
 import { restoreProductStock } from "@/app/lib/products";
+import { recordStockMovementSafely } from "@/app/lib/stock-movements";
 
 export const runtime = "nodejs";
 
@@ -36,7 +37,16 @@ export async function PATCH(request: Request, context: RouteContext<"/api/admin/
     }
 
     if (requestedStatus === "cancelled") {
-      await restoreProductStock(updatedOrder.product_id, updatedOrder.quantity);
+      const restoredProduct = await restoreProductStock(updatedOrder.product_id, updatedOrder.quantity);
+      await recordStockMovementSafely({
+        productId: restoredProduct.id,
+        productName: restoredProduct.name,
+        movementType: "order_cancellation",
+        quantityChange: updatedOrder.quantity,
+        previousQuantity: restoredProduct.stockQuantity - updatedOrder.quantity,
+        newQuantity: restoredProduct.stockQuantity,
+        note: `Annulation de la commande ${updatedOrder.order_number}`,
+      });
     }
 
     return NextResponse.json(updatedOrder);

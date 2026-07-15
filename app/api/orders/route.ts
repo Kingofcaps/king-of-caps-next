@@ -8,6 +8,7 @@ import {
   type PaymentMethod,
 } from "@/app/lib/orders";
 import { InsufficientStockError, getProduct, reserveProductStock } from "@/app/lib/products";
+import { recordStockMovementSafely } from "@/app/lib/stock-movements";
 
 export const runtime = "nodejs";
 
@@ -76,7 +77,16 @@ export async function POST(request: Request) {
       });
 
       try {
-        await reserveProductStock(product.id, quantity);
+        const updatedProduct = await reserveProductStock(product.id, quantity);
+        await recordStockMovementSafely({
+          productId: updatedProduct.id,
+          productName: updatedProduct.name,
+          movementType: "order_deduction",
+          quantityChange: updatedProduct.stockQuantity - product.stockQuantity,
+          previousQuantity: product.stockQuantity,
+          newQuantity: updatedProduct.stockQuantity,
+          note: `Commande ${order.order_number}`,
+        });
       } catch (stockError) {
         console.error("Erreur de mise à jour du stock après création de commande :", stockError);
         return NextResponse.json(

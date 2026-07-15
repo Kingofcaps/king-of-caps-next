@@ -603,7 +603,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     setUpdatingStockIds(new Set(updatingStockIdsRef.current));
   }
 
-  async function updateStock(product: Product, quantity: number, successMessage: string) {
+  async function updateStock(product: Product, quantity: number, movementType: "increase" | "decrease" | "restock", successMessage: string) {
     if (updatingStockIdsRef.current.has(product.id)) return false;
 
     const stockQuantity = Math.max(0, Math.floor(quantity));
@@ -623,7 +623,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
         await fetch(`/api/admin/products/${product.id}/stock`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ stockQuantity }),
+          body: JSON.stringify({ stockQuantity, movementType }),
         }),
       );
       setProducts((current) => current.map((item) => item.id === product.id ? updatedProduct : item));
@@ -642,7 +642,12 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
   async function changeStock(product: Product, change: -1 | 1) {
     const stockQuantity = Math.max(0, product.stockQuantity + change);
     if (stockQuantity === product.stockQuantity) return;
-    await updateStock(product, stockQuantity, `Stock de ${product.name} mis à jour.`);
+    await updateStock(
+      product,
+      stockQuantity,
+      change === 1 ? "increase" : "decrease",
+      `Stock de ${product.name} mis à jour.`,
+    );
   }
 
   function openRestockPopup(product: Product) {
@@ -666,6 +671,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     const didUpdate = await updateStock(
       restockingProduct,
       quantity,
+      "restock",
       `${restockingProduct.name} réapprovisionné à ${quantity} unité${quantity > 1 ? "s" : ""}.`,
     );
     if (didUpdate) setRestockingProduct(null);

@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { ADMIN_COOKIE, isAdminToken } from "@/app/lib/admin-auth";
 import { getProducts, nextProductId, saveProducts, type Product } from "@/app/lib/products";
+import { recordStockMovementSafely } from "@/app/lib/stock-movements";
 
 export const runtime = "nodejs";
 
@@ -90,6 +91,15 @@ export async function POST(request: Request) {
     };
 
     await saveProducts([...products, product]);
+    await recordStockMovementSafely({
+      productId: product.id,
+      productName: product.name,
+      movementType: "creation",
+      quantityChange: stockQuantity,
+      previousQuantity: 0,
+      newQuantity: stockQuantity,
+      note: "Création du produit",
+    });
     return NextResponse.json(product, { status: 201 });
   } catch (error) {
     return NextResponse.json(
