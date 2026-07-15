@@ -6,6 +6,7 @@ import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useSta
 import { createClient } from "@supabase/supabase-js";
 import { formatPrice, parsePrice, type Order, type OrderStatus } from "@/app/lib/orders";
 import type { Product } from "@/app/lib/products";
+import CampaignLinkGenerator from "./CampaignLinkGenerator";
 import { exportOrdersPdf, exportOrdersXlsx, filterOrdersForExport, totalExportRevenue, type ExportDateFilter } from "./orderExports";
 
 type ProductForm = Omit<Product, "id" | "image" | "images" | "inStock">;
@@ -786,6 +787,8 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
               <DashboardStat label="Commandes annulées" value={dashboard.cancelledOrders} tone="red" />
             </div>
           </section>
+
+          <CampaignLinkGenerator products={products.map(({ id, name }) => ({ id, name }))} />
 
           <section className="grid gap-5 xl:grid-cols-3">
             <DashboardChart title="Revenus — 30 derniers jours" values={dashboard.days.map((day) => day.revenue)} labels={dashboard.days.map((day) => day.label)} valueFormatter={formatPrice} />
