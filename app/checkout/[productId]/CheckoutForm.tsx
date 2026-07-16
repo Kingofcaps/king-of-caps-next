@@ -2,14 +2,16 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PaymentMethod } from "@/app/lib/orders";
 import { formatDualPrice, parsePrice } from "@/app/lib/prices";
 import type { Product } from "@/app/lib/products";
+import { isValidEmail } from "@/app/lib/validation";
 
 export default function CheckoutForm({ product }: { product: Product }) {
   const router = useRouter();
+  const submissionStarted = useRef(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
@@ -29,38 +31,42 @@ export default function CheckoutForm({ product }: { product: Product }) {
   const isStockReached = quantity >= stockQuantity;
 
   async function handleOrder() {
-    console.log("VALIDER COMMANDE CLICKED");
-    if (loading) return;
+    if (submissionStarted.current || loading) return;
     if (isOutOfStock) {
       setError("Stock insuffisant pour ce produit.");
       return;
     }
 
-    const requiredFields = [[firstName, "prénom"], [lastName, "nom"], [phone, "téléphone"], [address, "adresse"], [city, "ville ou quartier"]] as const;
+    const requiredFields = [[firstName, "prénom"], [lastName, "nom"], [phone, "téléphone"], [email, "adresse e-mail"], [address, "adresse"], [city, "ville ou quartier"]] as const;
     const missingField = requiredFields.find(([value]) => !value.trim());
     if (missingField) {
       setError(`Veuillez renseigner votre ${missingField[1]}.`);
       return;
     }
+    if (!isValidEmail(email)) {
+      setError("Veuillez saisir une adresse e-mail valide.");
+      return;
+    }
 
     const orderPayload = { productId: product.id, quantity, unit_price: unitPrice, total_amount: totalAmount, firstName: firstName.trim(), lastName: lastName.trim(), phone: phone.trim(), email: email.trim(), address: address.trim(), city: city.trim(), note: note.trim(), paymentMethod };
+    submissionStarted.current = true;
     setLoading(true);
     setError("");
-    console.log("ORDER PAYLOAD", orderPayload);
+    let orderCreated = false;
 
     try {
       const response = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(orderPayload) });
       const result = (await response.json()) as { success?: boolean; orderNumber?: string; error?: string };
-      console.log("ORDER RESPONSE STATUS", response.status);
-      console.log("ORDER RESPONSE BODY", result);
       if (!response.ok || !result.success) throw new Error(result.error ?? "Impossible de créer la commande.");
       if (!result.orderNumber) throw new Error("La commande a été créée sans numéro de référence.");
+      orderCreated = true;
       router.push(`/commande-confirmee/${result.orderNumber}`);
     } catch (submissionError) {
       console.error("Erreur lors de l’envoi de la commande :", submissionError);
       setError(submissionError instanceof Error ? submissionError.message : "Impossible de créer la commande.");
     } finally {
       setLoading(false);
+      if (!orderCreated) submissionStarted.current = false;
     }
   }
 
@@ -87,7 +93,7 @@ export default function CheckoutForm({ product }: { product: Product }) {
             </div>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <Input label="Téléphone *" type="tel" value={phone} onChange={setPhone} required />
-              <Input label="E-mail optionnel" type="email" value={email} onChange={setEmail} />
+              <Input label="Adresse e-mail *" type="email" autoComplete="email" value={email} onChange={setEmail} required />
             </div>
           </CheckoutCard>
 
@@ -149,8 +155,8 @@ function CheckoutCard({ title, children }: { title: string; children: React.Reac
   return <section className="rounded-2xl border border-[#e5e5e5] bg-white p-5 shadow-sm sm:p-6"><h2 className="text-lg font-black">{title}</h2><div className="mt-5">{children}</div></section>;
 }
 
-function Input({ label, type = "text", value, onChange, required = false }: { label: string; type?: string; value: string; onChange: (value: string) => void; required?: boolean }) {
-  return <label className="block text-sm font-bold text-zinc-800"><span className="mb-2 block">{label}</span><input type={type} value={value} onChange={(event) => onChange(event.target.value)} required={required} className="w-full rounded-xl border border-[#d4d4d4] bg-white px-4 py-3 text-zinc-900 outline-none transition focus:border-[#c9a227] focus:ring-2 focus:ring-[#c9a227]/15" /></label>;
+function Input({ label, type = "text", autoComplete, value, onChange, required = false }: { label: string; type?: string; autoComplete?: string; value: string; onChange: (value: string) => void; required?: boolean }) {
+  return <label className="block text-sm font-bold text-zinc-800"><span className="mb-2 block">{label}</span><input type={type} autoComplete={autoComplete} value={value} onChange={(event) => onChange(event.target.value)} required={required} className="w-full rounded-xl border border-[#d4d4d4] bg-white px-4 py-3 text-zinc-900 outline-none transition focus:border-[#c9a227] focus:ring-2 focus:ring-[#c9a227]/15" /></label>;
 }
 
 function PaymentOption({ value, selected, onChange, title, description }: { value: PaymentMethod; selected: PaymentMethod; onChange: (value: PaymentMethod) => void; title: string; description: string }) {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createFedaPayCheckout } from "@/app/lib/fedapay";
-import { notifyNewOrder } from "@/app/lib/order-notifications";
+import { notifyNewOrder, sendCustomerOrderConfirmation } from "@/app/lib/order-notifications";
 import {
   createOrder,
   createOrderNumber,
@@ -9,6 +9,7 @@ import {
 import { parsePrice } from "@/app/lib/prices";
 import { InsufficientStockError, getProduct, reserveProductStock } from "@/app/lib/products";
 import { recordStockMovementSafely } from "@/app/lib/stock-movements";
+import { isValidEmail } from "@/app/lib/validation";
 
 export const runtime = "nodejs";
 
@@ -41,11 +42,15 @@ export async function POST(request: Request) {
     const firstName = text(body.firstName);
     const lastName = text(body.lastName);
     const phone = text(body.phone);
+    const email = text(body.email).toLowerCase();
     const address = text(body.address);
     const city = text(body.city);
 
-    if (!productId || !Number.isInteger(quantity) || quantity < 1 || !firstName || !lastName || !phone || !address || !city || !validPaymentMethod(body.paymentMethod)) {
+    if (!productId || !Number.isInteger(quantity) || quantity < 1 || !firstName || !lastName || !phone || !email || !address || !city || !validPaymentMethod(body.paymentMethod)) {
       return NextResponse.json({ success: false, error: "Veuillez compléter tous les champs obligatoires." }, { status: 400 });
+    }
+    if (!isValidEmail(email)) {
+      return NextResponse.json({ success: false, error: "Veuillez saisir une adresse e-mail valide." }, { status: 400 });
     }
 
     try {
@@ -67,7 +72,7 @@ export async function POST(request: Request) {
         customer_first_name: firstName,
         customer_last_name: lastName,
         customer_phone: phone,
-        customer_email: text(body.email) || null,
+        customer_email: email,
         customer_address: address,
         customer_city: city,
         customer_note: text(body.note) || null,
@@ -95,10 +100,15 @@ export async function POST(request: Request) {
         );
       }
 
-      try {
-        await notifyNewOrder(order);
-      } catch (notificationError) {
-        console.error("Erreur d’envoi de la notification de commande :", notificationError);
+      const emailResults = await Promise.allSettled([
+        notifyNewOrder(order),
+        sendCustomerOrderConfirmation(order),
+      ]);
+      if (emailResults[0].status === "rejected") {
+        console.error(`Échec de la notification administrateur pour la commande ${order.order_number}.`);
+      }
+      if (emailResults[1].status === "rejected") {
+        console.error(`Échec de la confirmation client pour la commande ${order.order_number}.`);
       }
 
       if (body.paymentMethod === "cash_on_delivery") {
