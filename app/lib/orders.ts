@@ -57,15 +57,6 @@ async function supabaseRequest(path: string, init: RequestInit = {}) {
   return response;
 }
 
-export function parsePrice(price: string) {
-  const amount = Number(price.replace(/[^\d]/g, ""));
-  return Number.isFinite(amount) && amount > 0 ? amount : 0;
-}
-
-export function formatPrice(amount: number) {
-  return `${new Intl.NumberFormat("fr-FR").format(amount)} F`;
-}
-
 export async function createOrderNumber() {
   const response = await supabaseRequest("rpc/next_order_number", {
     method: "POST",

@@ -1,3 +1,5 @@
+import { formatFcfaPrice } from "@/app/lib/prices";
+
 export type Product = {
   id: string;
   name: string;
@@ -82,7 +84,7 @@ function toProduct(record: ProductRecord): Product {
   return {
     id: record.id,
     name: record.name,
-    price: record.price,
+    price: formatFcfaPrice(record.price),
     description: record.description,
     image: record.image,
     images: normalizeImages(record.images, record.image),

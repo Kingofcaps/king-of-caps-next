@@ -97,7 +97,7 @@ insert into public.products (
 select
   position::text,
   format('Casquette #%s', position),
-  '5 000 FCFA',
+  '5 000 F',
   'Une casquette pensée pour affirmer votre style. Sa silhouette soignée, son confort durable et la signature King of Caps en font une pièce essentielle au quotidien.',
   '/images/' || filename,
   jsonb_build_array('/images/' || filename),

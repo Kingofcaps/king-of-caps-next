@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cache } from "react";
-import { parsePrice } from "../../lib/orders";
+import { formatDualPrice, parsePrice } from "../../lib/prices";
 import { getProduct } from "../../lib/products";
 import { absoluteUrl, seoDescription, serializeJsonLd, SITE_NAME, SITE_URL } from "../../lib/seo";
 
@@ -61,7 +61,7 @@ export default async function ProductPage({
 
   if (!product) notFound();
 
-  const orderMessage = `Bonjour KING OF CAPS, je souhaite commander ${product.name} au prix de ${product.price}.`;
+  const orderMessage = `Bonjour KING OF CAPS, je souhaite commander ${product.name} au prix de ${formatDualPrice(product.price)}.`;
   const orderUrl = `${WHATSAPP_URL}?text=${encodeURIComponent(orderMessage)}`;
   const productUrl = absoluteUrl(`/product/${product.id}`);
   const productJsonLd = {
@@ -146,7 +146,7 @@ export default async function ProductPage({
           </h1>
 
           <div className="mt-7 flex items-center gap-4">
-            <p className="text-3xl font-black text-[#c9a227]">{product.price}</p>
+            <p className="text-3xl font-black leading-tight text-[#c9a227]">{formatDualPrice(product.price)}</p>
             <span className={`rounded-full border px-3 py-1 text-sm font-bold ${product.inStock ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-600"}`}>
               {product.inStock ? "En stock" : "Rupture de stock"}
             </span>

@@ -1,7 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { formatPrice, getOrderByNumber } from "@/app/lib/orders";
+import { getOrderByNumber } from "@/app/lib/orders";
+import { formatDualPrice } from "@/app/lib/prices";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,7 @@ export default async function OrderConfirmationPage({
           <div>
             <p className="font-black">{order.product_name}</p>
             <p className="mt-1 text-sm text-zinc-600">Quantité : {order.quantity}</p>
-            <p className="mt-1 font-bold text-[#c9a227]">{formatPrice(order.total_amount)}</p>
+            <p className="mt-1 font-bold leading-tight text-[#c9a227]">{formatDualPrice(order.total_amount)}</p>
           </div>
         </div>
 

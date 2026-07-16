@@ -1,5 +1,6 @@
 import { Resend } from "resend";
-import { formatPrice, type Order } from "@/app/lib/orders";
+import type { Order } from "@/app/lib/orders";
+import { formatDualPrice } from "@/app/lib/prices";
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>'"]/g, (character) => ({
@@ -37,10 +38,10 @@ export async function notifyNewOrder(order: Order) {
       `Téléphone : ${order.customer_phone}`,
       `Produit : ${order.product_name}`,
       `Quantité : ${order.quantity}`,
-      `Total : ${formatPrice(order.total_amount)}`,
+      `Total : ${formatDualPrice(order.total_amount)}`,
       `Paiement : ${order.payment_method}`,
     ].join("\n"),
-    html: `<h1>Nouvelle commande ${escapeHtml(order.order_number)}</h1><p><strong>Client :</strong> ${escapeHtml(customerName)}</p><p><strong>Téléphone :</strong> ${escapeHtml(order.customer_phone)}</p><p><strong>Produit :</strong> ${escapeHtml(order.product_name)}</p><p><strong>Quantité :</strong> ${order.quantity}</p><p><strong>Total :</strong> ${escapeHtml(formatPrice(order.total_amount))}</p><p><strong>Paiement :</strong> ${escapeHtml(order.payment_method)}</p>`,
+    html: `<h1>Nouvelle commande ${escapeHtml(order.order_number)}</h1><p><strong>Client :</strong> ${escapeHtml(customerName)}</p><p><strong>Téléphone :</strong> ${escapeHtml(order.customer_phone)}</p><p><strong>Produit :</strong> ${escapeHtml(order.product_name)}</p><p><strong>Quantité :</strong> ${order.quantity}</p><p><strong>Total :</strong> ${escapeHtml(formatDualPrice(order.total_amount))}</p><p><strong>Paiement :</strong> ${escapeHtml(order.payment_method)}</p>`,
   });
 
   if (error) throw new Error(error.message);

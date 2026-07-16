@@ -61,7 +61,7 @@ export default async function Home() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(homeJsonLd) }} />
       <HomeHeader />
 
-      <section className="relative isolate min-h-[340px] overflow-hidden text-white">
+      <section className="relative isolate min-h-[300px] overflow-hidden text-white sm:min-h-[320px]">
         <Image
           src="/images/boutique.jpg"
           alt="Boutique King of Caps"
@@ -71,17 +71,8 @@ export default async function Home() {
           className="object-cover"
         />
         <div className="absolute inset-0 bg-black/55" />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/25 to-[#fafafa]/35" />
 
-        <div className="relative z-10 mx-auto flex min-h-[340px] max-w-4xl flex-col items-center justify-center px-5 pb-6 text-center sm:px-8">
-          <Image
-            src="/images/logo.png"
-            alt="Logo King of Caps"
-            width={176}
-            height={176}
-            priority
-            className="mb-7 h-28 w-28 rounded-full object-contain shadow-2xl sm:h-36 sm:w-36"
-          />
+        <div className="relative z-10 mx-auto flex min-h-[300px] max-w-4xl flex-col items-center justify-center px-5 pb-10 pt-5 text-center sm:min-h-[320px] sm:px-8 sm:pb-12">
           <p className="mb-3 text-xs font-bold tracking-[0.35em] text-amber-300 sm:text-sm">
             LA RÉFÉRENCE À COTONOU
           </p>

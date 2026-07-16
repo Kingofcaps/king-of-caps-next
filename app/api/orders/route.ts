@@ -4,9 +4,9 @@ import { notifyNewOrder } from "@/app/lib/order-notifications";
 import {
   createOrder,
   createOrderNumber,
-  parsePrice,
   type PaymentMethod,
 } from "@/app/lib/orders";
+import { parsePrice } from "@/app/lib/prices";
 import { InsufficientStockError, getProduct, reserveProductStock } from "@/app/lib/products";
 import { recordStockMovementSafely } from "@/app/lib/stock-movements";
 

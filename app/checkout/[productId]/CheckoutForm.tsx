@@ -4,7 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatPrice, parsePrice, type PaymentMethod } from "@/app/lib/orders";
+import type { PaymentMethod } from "@/app/lib/orders";
+import { formatDualPrice, parsePrice } from "@/app/lib/prices";
 import type { Product } from "@/app/lib/products";
 
 export default function CheckoutForm({ product }: { product: Product }) {
@@ -126,7 +127,7 @@ export default function CheckoutForm({ product }: { product: Product }) {
           <p className="text-sm font-bold tracking-[0.2em] text-[#c9a227]">RÉSUMÉ DE LA COMMANDE</p>
           <div className="mt-5 flex gap-4">
             <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-zinc-100"><Image src={product.image} alt={product.name} fill sizes="96px" className="object-cover" /></div>
-            <div><h2 className="font-black">{product.name}</h2><p className="mt-2 text-sm text-zinc-500">Prix unitaire</p><p className="font-bold text-[#c9a227]">{formatPrice(unitPrice)}</p></div>
+            <div><h2 className="font-black">{product.name}</h2><p className="mt-2 text-sm text-zinc-500">Prix unitaire</p><p className="font-bold leading-tight text-[#c9a227]">{formatDualPrice(unitPrice)}</p></div>
           </div>
           <div className="mt-6 border-y border-[#e5e5e5] py-5">
             <p className="text-sm font-bold text-zinc-800">Quantité</p>
@@ -137,7 +138,7 @@ export default function CheckoutForm({ product }: { product: Product }) {
             </div>
             {isStockReached && <p className="mt-2 text-xs font-semibold text-zinc-500">Stock maximum atteint ({stockQuantity} unité{stockQuantity > 1 ? "s" : ""}).</p>}
           </div>
-          <div className="mt-5 flex items-center justify-between"><span className="font-bold">Total</span><strong className="text-2xl text-[#c9a227]">{formatPrice(totalAmount)}</strong></div>
+          <div className="mt-5 flex items-start justify-between gap-3"><span className="font-bold">Total</span><strong className="text-right text-xl leading-tight text-[#c9a227] sm:text-2xl">{formatDualPrice(totalAmount)}</strong></div>
         </aside>
       </div>
     </main>

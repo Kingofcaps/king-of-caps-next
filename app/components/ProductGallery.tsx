@@ -3,17 +3,16 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { formatDualPrice } from "@/app/lib/prices";
 import type { Product } from "@/app/lib/products";
+import ProductReveal from "./ProductReveal";
+import TrendingProducts from "./TrendingProducts";
 
 const WHATSAPP_URL = "https://wa.me/22950687515";
 
 function getOrderUrl(product: Product) {
-  const message = `Bonjour KING OF CAPS, je souhaite commander ${product.name} au prix de ${product.price}.`;
+  const message = `Bonjour KING OF CAPS, je souhaite commander ${product.name} au prix de ${formatDualPrice(product.price)}.`;
   return `${WHATSAPP_URL}?text=${encodeURIComponent(message)}`;
-}
-
-function getMobilePrice(price: string) {
-  return price.replace(/\s*FCFA/i, " F");
 }
 
 export default function ProductGallery({ products }: { products: Product[] }) {
@@ -39,25 +38,22 @@ export default function ProductGallery({ products }: { products: Product[] }) {
   }, [products, search]);
 
   return (
-    <section id="collection" className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-20">
-      <div className="mx-auto max-w-2xl text-center">
-        <p className="text-sm font-bold tracking-[0.25em] text-[#c9a227]">COLLECTION</p>
-        <h2 className="mt-3 text-3xl font-black sm:text-5xl">Nos casquettes</h2>
-        <p className="mt-4 text-zinc-500">Trouvez la pièce qui complète votre style.</p>
+    <section id="collection" className="mx-auto max-w-7xl px-5 pb-12 pt-2 sm:px-8 sm:pb-16 sm:pt-3">
+      <TrendingProducts products={products} />
+
+      <div className="mt-3 text-center">
+        <h2 className="text-sm font-black tracking-[0.2em] text-zinc-950 sm:text-base">NOS COLLECTIONS</h2>
+        <p className="mt-1 text-sm text-zinc-500" aria-live="polite">
+          {filteredProducts.length}{" "}
+          {filteredProducts.length > 1 ? "casquettes disponibles" : "casquette disponible"}
+        </p>
       </div>
 
-      <p className="mt-8 text-sm text-zinc-500" aria-live="polite">
-        {filteredProducts.length}{" "}
-        {filteredProducts.length > 1 ? "casquettes disponibles" : "casquette disponible"}
-      </p>
-
       {filteredProducts.length > 0 ? (
-        <div className="mt-8 grid grid-cols-3 gap-3 sm:grid-cols-2 sm:gap-8 lg:grid-cols-4">
-          {filteredProducts.map((product) => (
-            <article
-              key={product.id}
-              className="group overflow-hidden rounded-[18px] border border-[#e5e5e5] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.06)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_14px_32px_rgba(0,0,0,0.1)]"
-            >
+        <div className="mt-2 grid grid-cols-3 gap-3 sm:grid-cols-2 sm:gap-8 lg:grid-cols-4">
+          {filteredProducts.map((product, index) => (
+            <ProductReveal key={product.id} index={index}>
+              <article className="group h-full overflow-hidden rounded-[18px] border border-[#e5e5e5] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.06)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_14px_32px_rgba(0,0,0,0.1)]">
               <Link
                 href={`/product/${product.id}`}
                 className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
@@ -81,7 +77,7 @@ export default function ProductGallery({ products }: { products: Product[] }) {
                   {product.name}
                 </Link>
                 <div className="mt-1 flex items-center justify-between gap-1 sm:gap-3">
-                  <p className="truncate text-[10px] font-black text-[#d4af37] sm:text-lg"><span className="sm:hidden">{getMobilePrice(product.price)}</span><span className="hidden sm:inline">{product.price}</span></p>
+                  <p className="text-[10px] font-black leading-tight text-[#d4af37] sm:text-lg">{formatDualPrice(product.price)}</p>
                   <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold sm:px-2.5 sm:py-1 sm:text-xs ${product.inStock ? "bg-emerald-900 text-emerald-100" : "bg-red-50 text-red-600"}`}>
                     {product.inStock ? "En stock" : "Rupture de stock"}
                   </span>
@@ -94,7 +90,8 @@ export default function ProductGallery({ products }: { products: Product[] }) {
                   </div>
                 </div>
               </div>
-            </article>
+              </article>
+            </ProductReveal>
           ))}
         </div>
       ) : (
