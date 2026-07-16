@@ -1,25 +1,106 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { cache } from "react";
+import { parsePrice } from "../../lib/orders";
 import { getProduct } from "../../lib/products";
+import { absoluteUrl, seoDescription, serializeJsonLd, SITE_NAME, SITE_URL } from "../../lib/seo";
 
 const WHATSAPP_URL = "https://wa.me/22950687515";
+const getProductForPage = cache(getProduct);
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }: PageProps<"/product/[id]">): Promise<Metadata> {
+  const { id } = await params;
+  const product = await getProductForPage(id);
+
+  if (!product) {
+    return {
+      title: "Produit introuvable",
+      robots: { index: false, follow: false },
+    };
+  }
+
+  const canonicalPath = `/product/${product.id}`;
+  const description = seoDescription(
+    product.description,
+    `Découvrez ${product.name}, une casquette disponible chez KING OF CAPS à Cotonou avec livraison partout au Bénin.`,
+  );
+  const images = product.images.map((image) => ({ url: absoluteUrl(image), alt: `${product.name} — KING OF CAPS` }));
+
+  return {
+    title: `${product.name} — Casquette à Cotonou`,
+    description,
+    keywords: [product.name, product.brand, product.category, product.color, "casquette Cotonou", "casquette Bénin"].filter(Boolean),
+    alternates: { canonical: canonicalPath },
+    openGraph: {
+      type: "website",
+      locale: "fr_BJ",
+      url: canonicalPath,
+      siteName: SITE_NAME,
+      title: `${product.name} | KING OF CAPS`,
+      description,
+      images,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${product.name} | KING OF CAPS`,
+      description,
+      images,
+    },
+  };
+}
 
 export default async function ProductPage({
   params,
 }: PageProps<"/product/[id]">) {
   const { id } = await params;
-  const product = await getProduct(id);
+  const product = await getProductForPage(id);
 
   if (!product) notFound();
 
   const orderMessage = `Bonjour KING OF CAPS, je souhaite commander ${product.name} au prix de ${product.price}.`;
   const orderUrl = `${WHATSAPP_URL}?text=${encodeURIComponent(orderMessage)}`;
+  const productUrl = absoluteUrl(`/product/${product.id}`);
+  const productJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    "@id": `${productUrl}#product`,
+    name: product.name,
+    description: seoDescription(product.description, `${product.name}, disponible chez KING OF CAPS à Cotonou.`),
+    image: product.images.map(absoluteUrl),
+    sku: product.id,
+    category: product.category,
+    color: product.color || undefined,
+    brand: {
+      "@type": "Brand",
+      name: product.brand || SITE_NAME,
+    },
+    offers: {
+      "@type": "Offer",
+      url: productUrl,
+      priceCurrency: "XOF",
+      price: parsePrice(product.price),
+      availability: product.inStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+      itemCondition: "https://schema.org/NewCondition",
+      seller: { "@id": `${SITE_URL}/#organization` },
+    },
+  };
+  const breadcrumbJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Accueil", item: SITE_URL },
+      { "@type": "ListItem", position: 2, name: product.name, item: productUrl },
+    ],
+  };
 
   return (
     <main className="min-h-screen bg-[#fafafa] text-black">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(productJsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbJsonLd) }} />
       <header className="border-b border-[#e5e5e5] bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
           <Link href="/" className="text-sm font-bold tracking-[0.22em] text-black">

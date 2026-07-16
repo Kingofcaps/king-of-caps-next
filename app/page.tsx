@@ -3,14 +3,62 @@ import HomeHeader from "./components/HomeHeader";
 import ProductGallery from "./components/ProductGallery";
 import StorefrontBottom from "./components/StorefrontBottom";
 import { getProducts } from "./lib/products";
+import { absoluteUrl, serializeJsonLd, SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "./lib/seo";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const products = await getProducts();
+  const homeJsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": `${SITE_URL}/#organization`,
+        name: SITE_NAME,
+        url: SITE_URL,
+        logo: absoluteUrl("/images/logo.jpg"),
+        description: SITE_DESCRIPTION,
+        contactPoint: {
+          "@type": "ContactPoint",
+          telephone: "+22950687515",
+          contactType: "customer service",
+          areaServed: "BJ",
+          availableLanguage: "fr",
+        },
+      },
+      {
+        "@type": "Store",
+        "@id": `${SITE_URL}/#store`,
+        name: SITE_NAME,
+        url: SITE_URL,
+        image: absoluteUrl("/images/boutique.jpg"),
+        telephone: "+22950687515",
+        parentOrganization: { "@id": `${SITE_URL}/#organization` },
+        address: {
+          "@type": "PostalAddress",
+          addressLocality: "Cotonou",
+          addressCountry: "BJ",
+        },
+        areaServed: [
+          { "@type": "City", name: "Cotonou" },
+          { "@type": "Country", name: "Bénin" },
+        ],
+      },
+      {
+        "@type": "WebSite",
+        "@id": `${SITE_URL}/#website`,
+        name: SITE_NAME,
+        url: SITE_URL,
+        inLanguage: "fr-BJ",
+        publisher: { "@id": `${SITE_URL}/#organization` },
+      },
+    ],
+  };
 
   return (
     <main className="min-h-screen bg-[#fafafa] text-black">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(homeJsonLd) }} />
       <HomeHeader />
 
       <section className="relative isolate min-h-[340px] overflow-hidden text-white">
