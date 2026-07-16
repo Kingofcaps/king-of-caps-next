@@ -18,8 +18,8 @@ type Commitment = {
 
 const commitments: Commitment[] = [
   {
-    title: "Livraison partout au Bénin",
-    description: "Nous livrons vos commandes rapidement partout au Bénin.",
+    title: "Livraison au Bénin et à l’international",
+    description: "Nous livrons vos commandes partout au Bénin et dans plusieurs pays, selon la destination.",
     icon: Truck,
   },
   {
