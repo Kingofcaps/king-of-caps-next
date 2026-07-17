@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { ADMIN_COOKIE, isAdminToken } from "@/app/lib/admin-auth";
-import { getProducts, saveProducts } from "@/app/lib/products";
+import { getProduct, removeProduct, replaceProduct } from "@/app/lib/products";
 import { recordStockMovementSafely } from "@/app/lib/stock-movements";
 
 export const runtime = "nodejs";
@@ -19,16 +19,13 @@ export async function PATCH(request: Request, context: RouteContext<"/api/admin/
 
   const { id } = await context.params;
   const updates: unknown = await request.json();
-  const products = await getProducts();
-  const index = products.findIndex((product) => product.id === id);
-
-  if (index === -1) return NextResponse.json({ error: "Produit introuvable." }, { status: 404 });
+  const product = await getProduct(id);
+  if (!product) return NextResponse.json({ error: "Produit introuvable." }, { status: 404 });
   if (!updates || typeof updates !== "object") {
     return NextResponse.json({ error: "Données invalides." }, { status: 400 });
   }
 
   const payload = updates as Record<string, unknown>;
-  const product = products[index];
   const stockQuantity =
     typeof payload.stockQuantity === "number" && Number.isFinite(payload.stockQuantity)
       ? Math.max(0, Math.floor(payload.stockQuantity))
@@ -49,8 +46,8 @@ export async function PATCH(request: Request, context: RouteContext<"/api/admin/
     inStock: available,
   };
 
-  products[index] = nextProduct;
-  await saveProducts(products);
+  const updatedProduct = await replaceProduct(nextProduct);
+  if (!updatedProduct) return NextResponse.json({ error: "Produit introuvable." }, { status: 404 });
   if (stockQuantity !== product.stockQuantity) {
     await recordStockMovementSafely({
       productId: nextProduct.id,
@@ -62,20 +59,15 @@ export async function PATCH(request: Request, context: RouteContext<"/api/admin/
       note: "Modification de la fiche produit",
     });
   }
-  return NextResponse.json(nextProduct);
+  return NextResponse.json(updatedProduct);
 }
 
 export async function DELETE(_request: Request, context: RouteContext<"/api/admin/products/[id]">) {
   if (!(await isAuthorized())) return unauthorized();
 
   const { id } = await context.params;
-  const products = await getProducts();
-  const remainingProducts = products.filter((product) => product.id !== id);
-
-  if (remainingProducts.length === products.length) {
-    return NextResponse.json({ error: "Produit introuvable." }, { status: 404 });
-  }
-
-  await saveProducts(remainingProducts);
+  const product = await getProduct(id);
+  if (!product) return NextResponse.json({ error: "Produit introuvable." }, { status: 404 });
+  await removeProduct(id);
   return NextResponse.json({ ok: true });
 }

@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { ADMIN_COOKIE, isAdminToken } from "@/app/lib/admin-auth";
-import { getProducts, nextProductId, saveProducts, type Product } from "@/app/lib/products";
+import { getProducts, insertProduct, type Product } from "@/app/lib/products";
 import { recordStockMovementSafely } from "@/app/lib/stock-movements";
 
 export const runtime = "nodejs";
@@ -70,11 +70,15 @@ export async function POST(request: Request) {
       ? await saveUpload(primaryFile)
       : undefined;
     const uploadedImages = await Promise.all(additionalFiles.map(saveUpload));
-    const image = uploadedPrimary ?? uploadedImages[0] ?? "/images/logo.png";
+    const image = uploadedPrimary ?? uploadedImages[0] ?? "/images/logo.jpg";
     const stockQuantity = getQuantity(formData);
     const available = stockQuantity > 0;
+    const firstSortOrder = products.reduce(
+      (lowest, product) => Math.min(lowest, product.sortOrder),
+      0,
+    );
     const product: Product = {
-      id: nextProductId(products),
+      id: randomUUID(),
       name,
       price,
       description,
@@ -88,19 +92,22 @@ export async function POST(request: Request) {
       newArrival: formData.get("newArrival") === "true",
       available,
       inStock: available,
+      sortOrder: firstSortOrder - 1,
+      createdAt: new Date().toISOString(),
     };
 
-    await saveProducts([...products, product]);
+    const createdProduct = await insertProduct(product);
+    if (!createdProduct) throw new Error("Supabase n’a pas retourné le produit créé.");
     await recordStockMovementSafely({
-      productId: product.id,
-      productName: product.name,
+      productId: createdProduct.id,
+      productName: createdProduct.name,
       movementType: "creation",
       quantityChange: stockQuantity,
       previousQuantity: 0,
       newQuantity: stockQuantity,
       note: "Création du produit",
     });
-    return NextResponse.json(product, { status: 201 });
+    return NextResponse.json(createdProduct, { status: 201 });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Impossible d’ajouter ce produit." },

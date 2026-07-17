@@ -15,6 +15,8 @@ export type Product = {
   newArrival: boolean;
   available: boolean;
   inStock: boolean;
+  sortOrder: number;
+  createdAt: string;
 };
 
 type ProductRecord = {
@@ -31,6 +33,8 @@ type ProductRecord = {
   featured: boolean;
   new_arrival: boolean;
   available: boolean;
+  sort_order: number;
+  created_at: string;
 };
 
 export class InsufficientStockError extends Error {
@@ -96,6 +100,8 @@ function toProduct(record: ProductRecord): Product {
     newArrival: record.new_arrival === true,
     available,
     inStock: available,
+    sortOrder: Number.isFinite(Number(record.sort_order)) ? Number(record.sort_order) : Number.MAX_SAFE_INTEGER,
+    createdAt: record.created_at || new Date(0).toISOString(),
   };
 }
 
@@ -115,11 +121,18 @@ function toRecord(product: Product): ProductRecord {
     featured: product.featured,
     new_arrival: product.newArrival,
     available: stockQuantity > 0,
+    sort_order: product.sortOrder,
+    created_at: product.createdAt,
   };
 }
 
 export async function getProducts() {
-  const response = await supabaseProductsRequest("products?select=*&order=created_at.asc");
+  let response: Response;
+  try {
+    response = await supabaseProductsRequest("products?select=*&order=sort_order.asc.nullslast,created_at.desc");
+  } catch {
+    response = await supabaseProductsRequest("products?select=*&order=created_at.desc");
+  }
   return ((await response.json()) as ProductRecord[]).map(toProduct);
 }
 
@@ -146,15 +159,40 @@ export async function updateProductStock(id: string, quantity: number) {
   return product ? toProduct(product) : undefined;
 }
 
-// Kept for the existing admin routes. Product persistence is now Supabase-only.
-export async function saveProducts(products: Product[]) {
-  await supabaseProductsRequest("products?id=not.is.null", { method: "DELETE", headers: { Prefer: "return=minimal" } });
-  if (products.length === 0) return;
-
-  await supabaseProductsRequest("products", {
+export async function insertProduct(product: Product) {
+  const response = await supabaseProductsRequest("products", {
     method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(toRecord(product)),
+  });
+  const [createdProduct] = (await response.json()) as ProductRecord[];
+  return createdProduct ? toProduct(createdProduct) : undefined;
+}
+
+export async function replaceProduct(product: Product) {
+  const response = await supabaseProductsRequest(
+    `products?id=eq.${encodeURIComponent(product.id)}&select=*`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify(toRecord(product)),
+    },
+  );
+  const [updatedProduct] = (await response.json()) as ProductRecord[];
+  return updatedProduct ? toProduct(updatedProduct) : undefined;
+}
+
+export async function removeProduct(id: string) {
+  await supabaseProductsRequest(`products?id=eq.${encodeURIComponent(id)}`, {
+    method: "DELETE",
     headers: { Prefer: "return=minimal" },
-    body: JSON.stringify(products.map(toRecord)),
+  });
+}
+
+export async function persistProductOrder(productIds: string[]) {
+  await supabaseProductsRequest("rpc/reorder_products", {
+    method: "POST",
+    body: JSON.stringify({ p_product_ids: productIds }),
   });
 }
 
@@ -176,13 +214,4 @@ export async function restoreProductStock(productId: string, quantity: number) {
   const [product] = (await response.json()) as ProductRecord[];
   if (!product) throw new Error("Produit introuvable pour restaurer le stock.");
   return toProduct(product);
-}
-
-export function nextProductId(products: Product[]) {
-  const largestId = products.reduce((largest, product) => {
-    const id = Number(product.id);
-    return Number.isInteger(id) ? Math.max(largest, id) : largest;
-  }, 0);
-
-  return String(largestId + 1);
 }

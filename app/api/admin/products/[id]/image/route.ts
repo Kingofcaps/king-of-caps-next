@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { ADMIN_COOKIE, isAdminToken } from "@/app/lib/admin-auth";
-import { getProducts, saveProducts } from "@/app/lib/products";
+import { getProduct, replaceProduct } from "@/app/lib/products";
 
 export const runtime = "nodejs";
 
@@ -44,9 +44,8 @@ export async function POST(
       return NextResponse.json({ error: "Veuillez sélectionner des images valides." }, { status: 400 });
     }
 
-    const products = await getProducts();
-    const index = products.findIndex((product) => product.id === id);
-    if (index === -1) return NextResponse.json({ error: "Produit introuvable." }, { status: 404 });
+    const product = await getProduct(id);
+    if (!product) return NextResponse.json({ error: "Produit introuvable." }, { status: 404 });
 
     const uploadsDir = path.join(process.cwd(), "public", "uploads");
     await mkdir(uploadsDir, { recursive: true });
@@ -58,15 +57,16 @@ export async function POST(
     };
     const primaryImage = file instanceof File && file.size > 0 ? await saveFile(file) : undefined;
     const uploadedImages = await Promise.all(additionalFiles.map(saveFile));
-    const image = primaryImage ?? products[index].image;
+    const image = primaryImage ?? product.image;
 
-    products[index] = {
-      ...products[index],
+    const nextProduct = {
+      ...product,
       image,
-      images: Array.from(new Set([image, ...products[index].images, ...uploadedImages])).slice(0, 6),
+      images: Array.from(new Set([image, ...product.images, ...uploadedImages])).slice(0, 6),
     };
-    await saveProducts(products);
-    return NextResponse.json(products[index]);
+    const updatedProduct = await replaceProduct(nextProduct);
+    if (!updatedProduct) return NextResponse.json({ error: "Produit introuvable." }, { status: 404 });
+    return NextResponse.json(updatedProduct);
   } catch {
     return NextResponse.json({ error: "Impossible de mettre à jour l’image." }, { status: 400 });
   }
