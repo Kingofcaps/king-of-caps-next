@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { formatDualPrice, parsePrice } from "../../lib/prices";
 import { getProduct } from "../../lib/products";
 import { absoluteUrl, seoDescription, serializeJsonLd, SITE_NAME, SITE_URL } from "../../lib/seo";
+import ProductImageGallery from "./ProductImageGallery";
 
 const WHATSAPP_URL = "https://wa.me/22950687515";
 const getProductForPage = cache(getProduct);
@@ -118,16 +118,7 @@ export default async function ProductPage({
       </header>
 
       <section className="mx-auto grid max-w-7xl gap-10 px-5 py-10 sm:px-8 sm:py-16 lg:grid-cols-2 lg:items-center lg:gap-16">
-        <div className="relative aspect-square overflow-hidden rounded-[18px] border border-[#e5e5e5] bg-white shadow-[0_12px_30px_rgba(0,0,0,0.08)]">
-          <Image
-            src={product.image}
-            alt={product.name}
-            fill
-            priority
-            sizes="(max-width: 1024px) 100vw, 50vw"
-            className="object-cover"
-          />
-        </div>
+        <ProductImageGallery productName={product.name} primaryImage={product.image} images={product.images} />
 
         <div className="lg:py-8">
           <Link

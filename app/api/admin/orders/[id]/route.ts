@@ -7,7 +7,7 @@ import { recordStockMovementSafely } from "@/app/lib/stock-movements";
 
 export const runtime = "nodejs";
 
-const validStatuses: OrderStatus[] = ["new", "confirmed", "preparing", "delivered", "cancelled"];
+const validStatuses: OrderStatus[] = ["new", "pending", "awaiting_payment", "confirmed", "preparing", "delivered", "cancelled"];
 
 export async function PATCH(request: Request, context: RouteContext<"/api/admin/orders/[id]">) {
   if (!isAdminToken((await cookies()).get(ADMIN_COOKIE)?.value)) {
@@ -36,7 +36,8 @@ export async function PATCH(request: Request, context: RouteContext<"/api/admin/
       return NextResponse.json({ error: "La commande a été modifiée entre-temps. Réessayez." }, { status: 409 });
     }
 
-    if (requestedStatus === "cancelled") {
+    const stockWasReserved = updatedOrder.stock_reserved_at !== null || updatedOrder.payment_method === "cash_on_delivery";
+    if (requestedStatus === "cancelled" && stockWasReserved) {
       const restoredProduct = await restoreProductStock(updatedOrder.product_id, updatedOrder.quantity);
       await recordStockMovementSafely({
         productId: restoredProduct.id,

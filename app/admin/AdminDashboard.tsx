@@ -11,6 +11,17 @@ import CampaignLinkGenerator from "./CampaignLinkGenerator";
 import { exportOrdersPdf, exportOrdersXlsx, filterOrdersForExport, totalExportRevenue, type ExportDateFilter } from "./orderExports";
 
 type ProductForm = Omit<Product, "id" | "image" | "images" | "inStock" | "sortOrder" | "createdAt">;
+type BulkProductRow = {
+  id: string;
+  file: File;
+  preview: string;
+  name: string;
+  color: string;
+  price: string;
+  stock: string;
+  description: string;
+  error: string;
+};
 type AdminView = "dashboard" | "products" | "orders";
 type ProductFilter = "all" | "in_stock" | "low_stock" | "out_of_stock" | "featured" | "new_arrival";
 type ProductSort = "newest" | "name_asc" | "price_asc" | "price_desc" | "stock_asc" | "stock_desc";
@@ -54,7 +65,7 @@ function stockTextClassName(quantity: number) {
 }
 
 const paymentStatusLabels = { pending: "En attente", paid: "Payé", failed: "Échec" } as const;
-const orderStatusLabels: Record<OrderStatus, string> = { new: "Nouvelle", confirmed: "Confirmée", preparing: "En préparation", delivered: "Livrée", cancelled: "Annulée" };
+const orderStatusLabels: Record<OrderStatus, string> = { new: "Nouvelle", pending: "En attente", awaiting_payment: "Paiement en attente", confirmed: "Confirmée", preparing: "En préparation", delivered: "Livrée", cancelled: "Annulée" };
 const paymentStatusClassNames: Record<Order["payment_status"], string> = {
   pending: "bg-yellow-100 text-yellow-800",
   paid: "bg-green-100 text-green-800",
@@ -62,6 +73,8 @@ const paymentStatusClassNames: Record<Order["payment_status"], string> = {
 };
 const orderStatusClassNames: Record<OrderStatus, string> = {
   new: "bg-blue-100 text-blue-800",
+  pending: "bg-blue-100 text-blue-800",
+  awaiting_payment: "bg-amber-100 text-amber-800",
   confirmed: "bg-purple-100 text-purple-800",
   preparing: "bg-orange-100 text-orange-800",
   delivered: "bg-green-100 text-green-800",
@@ -94,6 +107,10 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
   const [newProduct, setNewProduct] = useState<ProductForm>(emptyProduct);
   const [newImage, setNewImage] = useState<File | null>(null);
   const [newImages, setNewImages] = useState<File[]>([]);
+  const [simpleFormVersion, setSimpleFormVersion] = useState(0);
+  const [bulkRows, setBulkRows] = useState<BulkProductRow[]>([]);
+  const [bulkInputVersion, setBulkInputVersion] = useState(0);
+  const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [editedImage, setEditedImage] = useState<File | null>(null);
   const [editedImages, setEditedImages] = useState<File[]>([]);
@@ -130,6 +147,9 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
   const audioContextRef = useRef<AudioContext | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
   const updatingStockIdsRef = useRef<Set<string>>(new Set());
+  const bulkPreviewsRef = useRef<string[]>([]);
+  const simpleSubmittingRef = useRef(false);
+  const bulkSubmittingRef = useRef(false);
   const filteredProducts = useMemo(() => {
     const query = productSearch.trim().toLowerCase();
     const result = products.filter((product) => {
@@ -197,7 +217,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
       totalRevenue: revenueOrders.reduce((total, order) => total + order.total_amount, 0),
       revenueToday: revenueOrders.filter((order) => dayKey(order.created_at) === today).reduce((total, order) => total + order.total_amount, 0),
       ordersToday: orders.filter((order) => dayKey(order.created_at) === today).length,
-      pendingOrders: orders.filter((order) => order.order_status === "new").length,
+      pendingOrders: orders.filter((order) => order.order_status === "new" || order.order_status === "pending" || order.order_status === "awaiting_payment").length,
       deliveredOrders: orders.filter((order) => order.order_status === "delivered").length,
       cancelledOrders: orders.filter((order) => order.order_status === "cancelled").length,
       days,
@@ -283,6 +303,10 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     };
   }, []);
 
+  useEffect(() => () => {
+    bulkPreviewsRef.current.forEach((preview) => URL.revokeObjectURL(preview));
+  }, []);
+
   useEffect(() => {
     const initialRefresh = window.setTimeout(() => { void refreshOrders(); }, 0);
     if (view !== "orders") return () => window.clearTimeout(initialRefresh);
@@ -365,6 +389,13 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
 
   async function createProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (simpleSubmittingRef.current) return;
+    if (!newImage) {
+      setMessage("Veuillez sélectionner une image principale.");
+      return;
+    }
+
+    simpleSubmittingRef.current = true;
     setMessage("");
     setIsSaving(true);
 
@@ -378,11 +409,119 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
       setNewProduct(emptyProduct);
       setNewImage(null);
       setNewImages([]);
+      setSimpleFormVersion((current) => current + 1);
       setMessage("Produit ajouté.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Impossible d’ajouter le produit.");
     } finally {
+      simpleSubmittingRef.current = false;
       setIsSaving(false);
+    }
+  }
+
+  function handleBulkFilesChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []).slice(0, 10);
+    bulkPreviewsRef.current.forEach((preview) => URL.revokeObjectURL(preview));
+
+    const rows = files.map((file) => {
+      const preview = URL.createObjectURL(file);
+      return {
+        id: globalThis.crypto?.randomUUID?.() ?? preview,
+        file,
+        preview,
+        name: "",
+        color: "",
+        price: "5000",
+        stock: "1",
+        description: "",
+        error: "",
+      };
+    });
+    bulkPreviewsRef.current = rows.map((row) => row.preview);
+    setBulkRows(rows);
+    setMessage((event.target.files?.length ?? 0) > 10 ? "Seules les 10 premières images ont été retenues." : "");
+  }
+
+  function updateBulkProduct(id: string, updates: Partial<Pick<BulkProductRow, "name" | "color" | "price" | "stock" | "description">>) {
+    setBulkRows((current) => current.map((row) => row.id === id ? { ...row, ...updates, error: "" } : row));
+  }
+
+  function removeBulkProduct(id: string) {
+    const removedRow = bulkRows.find((row) => row.id === id);
+    if (removedRow) URL.revokeObjectURL(removedRow.preview);
+    const remainingRows = bulkRows.filter((row) => row.id !== id);
+    bulkPreviewsRef.current = remainingRows.map((row) => row.preview);
+    setBulkRows(remainingRows);
+    setBulkInputVersion((current) => current + 1);
+  }
+
+  async function handleBulkSubmit() {
+    if (bulkSubmittingRef.current) return;
+    if (bulkRows.length === 0) {
+      setMessage("Sélectionnez au moins une image.");
+      return;
+    }
+    const invalidRows = new Set(bulkRows.filter((row) => {
+      const stock = Number(row.stock);
+      return !row.name.trim() || !row.price.trim() || !row.stock.trim() || !Number.isFinite(stock) || stock < 0;
+    }).map((row) => row.id));
+    if (invalidRows.size > 0) {
+      setBulkRows((current) => current.map((row) => invalidRows.has(row.id)
+        ? { ...row, error: "Renseignez un nom, un prix et un stock valides." }
+        : row));
+      setMessage("Corrigez les lignes signalées avant l’ajout.");
+      return;
+    }
+
+    bulkSubmittingRef.current = true;
+    setMessage("");
+    setIsBulkSubmitting(true);
+    const createdProducts: Product[] = [];
+    const failedIds = new Set<string>();
+    const failureMessages = new Map<string, string>();
+
+    for (const row of bulkRows) {
+      try {
+        const formData = new FormData();
+        appendFormData(
+          formData,
+          {
+            ...emptyProduct,
+            name: row.name,
+            color: row.color,
+            price: row.price,
+            stockQuantity: Math.max(0, Math.floor(Number(row.stock))),
+            description: row.description,
+          },
+          row.file,
+          [],
+        );
+        const product = await readResponse(
+          await fetch("/api/admin/products", { method: "POST", body: formData }),
+        );
+        createdProducts.push(product);
+      } catch (error) {
+        failedIds.add(row.id);
+        failureMessages.set(row.id, error instanceof Error ? error.message : "Impossible d’ajouter ce produit.");
+      }
+    }
+
+    try {
+      setProducts((current) => [...createdProducts, ...current]);
+      const successfulRows = bulkRows.filter((row) => !failedIds.has(row.id));
+      successfulRows.forEach((row) => URL.revokeObjectURL(row.preview));
+      const remainingRows = bulkRows
+        .filter((row) => failedIds.has(row.id))
+        .map((row) => ({ ...row, error: failureMessages.get(row.id) ?? "Impossible d’ajouter ce produit." }));
+      bulkPreviewsRef.current = remainingRows.map((row) => row.preview);
+      setBulkRows(remainingRows);
+      if (remainingRows.length === 0) setBulkInputVersion((current) => current + 1);
+      const addedCount = createdProducts.length;
+      const errorCount = failedIds.size;
+      setMessage(`${addedCount} produit${addedCount > 1 ? "s" : ""} ajouté${addedCount > 1 ? "s" : ""}, ${errorCount} erreur${errorCount > 1 ? "s" : ""}.`);
+    } finally {
+      bulkSubmittingRef.current = false;
+      setIsBulkSubmitting(false);
     }
   }
 
@@ -643,14 +782,50 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
             <p className="text-sm font-bold tracking-[0.2em] text-[#c9a227]">GESTION PRODUIT</p>
             <h2 className="mt-2 text-2xl font-black">Ajouter une casquette</h2>
             <ProductEditor
+              key={simpleFormVersion}
               form={newProduct}
               onTextChange={(name, value) => setNewProduct((current) => setTextField(current, name, value))}
               onToggle={(name, value) => setNewProduct((current) => ({ ...current, [name]: value }))}
               onImageChange={setNewImage}
               onImagesChange={setNewImages}
               onSubmit={createProduct}
+              requireMainImage
+              isSubmitting={isSaving}
               submitLabel={isSaving ? "Enregistrement…" : "Ajouter le produit"}
             />
+          </section>
+
+          <section className="rounded-3xl border border-[#e5e5e5] bg-white p-5 shadow-sm sm:p-7">
+            <h2 className="text-2xl font-black">Ajouter plusieurs casquettes</h2>
+            <p className="mt-2 text-sm text-zinc-500">Sélectionnez jusqu’à 10 images depuis votre appareil.</p>
+            <input
+              key={bulkInputVersion}
+              id="bulk-product-images"
+              name="bulk-product-images"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              onChange={handleBulkFilesChange}
+              className={`${fileInputClassName} mt-4`}
+            />
+            {bulkRows.length > 0 && (
+              <div className="mt-5 space-y-4">
+                {bulkRows.map((row, index) => (
+                  <div key={row.id} className="grid gap-4 rounded-2xl border border-[#e5e5e5] p-4 lg:grid-cols-[96px_repeat(4,minmax(0,1fr))] lg:items-end">
+                    <ImagePreview src={row.preview} label={`Aperçu du produit ${index + 1}`} />
+                    <Field label={`Nom du produit ${index + 1} *`}><input value={row.name} onChange={(event) => updateBulkProduct(row.id, { name: event.target.value })} required className={fieldClassName} /></Field>
+                    <Field label="Couleur"><input value={row.color} onChange={(event) => updateBulkProduct(row.id, { color: event.target.value })} className={fieldClassName} /></Field>
+                    <Field label="Prix (F) *"><input value={row.price} onChange={(event) => updateBulkProduct(row.id, { price: event.target.value })} required className={fieldClassName} /></Field>
+                    <Field label="Stock"><input type="number" min="0" value={row.stock} onChange={(event) => updateBulkProduct(row.id, { stock: event.target.value })} required className={fieldClassName} /></Field>
+                    <Field label="Description"><textarea value={row.description} onChange={(event) => updateBulkProduct(row.id, { description: event.target.value })} rows={2} className={`${fieldClassName} resize-y`} /></Field>
+                    <button type="button" onClick={() => removeBulkProduct(row.id)} className="rounded-xl border border-red-200 px-4 py-3 text-sm font-bold text-red-600 hover:bg-red-50 lg:col-start-5">Supprimer cette ligne</button>
+                    {row.error && <p className="text-sm font-bold text-red-600 lg:col-span-5">{row.error}</p>}
+                  </div>
+                ))}
+                <p className="text-sm font-bold text-zinc-700">{bulkRows.length} produit(s) à ajouter</p>
+                <button type="button" onClick={handleBulkSubmit} disabled={isBulkSubmitting} className="w-full rounded-xl bg-black py-3.5 font-black text-white transition hover:bg-[#c9a227] disabled:cursor-wait disabled:opacity-60">{isBulkSubmitting ? "Ajout en cours…" : "Ajouter tous les produits"}</button>
+              </div>
+            )}
           </section>
 
           <section>
@@ -736,6 +911,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
               onImageChange={setEditedImage}
               onImagesChange={setEditedImages}
               onSubmit={saveProduct}
+              isSubmitting={isSaving}
               submitLabel={isSaving ? "Enregistrement…" : "Enregistrer les modifications"}
             />
           </div>
@@ -776,7 +952,7 @@ function OrderCard({ order, isUpdating, isExpanded, onStatusChange, onToggleDeta
           <p className="mt-1 text-sm text-zinc-500">{order.quantity} unité(s) · {paymentMethodLabel(order.payment_method)} · {new Date(order.created_at).toLocaleDateString("fr-FR")}</p>
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold"><span className={`rounded-full px-2.5 py-1 ${paymentStatusClassNames[order.payment_status]}`}>Paiement : {paymentStatusLabels[order.payment_status]}</span><span className={`rounded-full px-2.5 py-1 ${orderStatusClassNames[order.order_status]}`}>Statut : {orderStatusLabels[order.order_status]}</span></div>
         </div>
-        <label className="text-sm font-bold text-zinc-700"><span className="mb-2 block">Statut commande</span><select disabled={isUpdating} value={order.order_status} onChange={(event) => onStatusChange(order.id, event.target.value as OrderStatus)} className="w-full rounded-xl border border-[#e5e5e5] bg-white px-3 py-2 text-sm font-bold text-[#a8861e] outline-none disabled:cursor-wait disabled:opacity-60"><option value="new">Nouvelle</option><option value="confirmed">Confirmée</option><option value="preparing">En préparation</option><option value="delivered">Livrée</option><option value="cancelled">Annulée</option></select>{isUpdating && <span className="mt-2 block text-xs text-[#a8861e]">Mise à jour...</span>}</label>
+        <label className="text-sm font-bold text-zinc-700"><span className="mb-2 block">Statut commande</span><select disabled={isUpdating} value={order.order_status} onChange={(event) => onStatusChange(order.id, event.target.value as OrderStatus)} className="w-full rounded-xl border border-[#e5e5e5] bg-white px-3 py-2 text-sm font-bold text-[#a8861e] outline-none disabled:cursor-wait disabled:opacity-60"><option value="new">Nouvelle</option><option value="pending">En attente</option><option value="awaiting_payment">Paiement en attente</option><option value="confirmed">Confirmée</option><option value="preparing">En préparation</option><option value="delivered">Livrée</option><option value="cancelled">Annulée</option></select>{isUpdating && <span className="mt-2 block text-xs text-[#a8861e]">Mise à jour...</span>}</label>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-3">
         {whatsappUrl ? <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-[#25D366] px-5 py-2 font-semibold text-white shadow hover:bg-[#1EBE5D] transition">WhatsApp</a> : <button type="button" disabled className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-zinc-200 px-5 py-2 font-semibold text-zinc-500">Téléphone indisponible</button>}
@@ -821,6 +997,8 @@ function ProductEditor({
   onImageChange,
   onImagesChange,
   onSubmit,
+  requireMainImage = false,
+  isSubmitting,
   submitLabel,
 }: {
   form: ProductForm | Product;
@@ -829,6 +1007,8 @@ function ProductEditor({
   onImageChange: (file: File | null) => void;
   onImagesChange: (files: File[]) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  requireMainImage?: boolean;
+  isSubmitting: boolean;
   submitLabel: string;
 }) {
   const [mainPreview, setMainPreview] = useState<string | null>(null);
@@ -877,14 +1057,14 @@ function ProductEditor({
             title="Image principale"
             helper="Cette image est utilisée comme visuel principal de la casquette."
           >
-            <input type="file" accept="image/*" onChange={handleMainImage} className={fileInputClassName} />
+            <input type="file" accept="image/jpeg,image/png,image/webp" required={requireMainImage} onChange={handleMainImage} className={fileInputClassName} />
             {mainPreview && <ImagePreview src={mainPreview} label="Aperçu de l’image principale" large />}
           </UploadCard>
           <UploadCard
             title="Images supplémentaires"
             helper="Ajoutez jusqu’à cinq vues complémentaires pour présenter le produit."
           >
-            <input type="file" accept="image/*" multiple onChange={handleAdditionalImages} className={fileInputClassName} />
+            <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={handleAdditionalImages} className={fileInputClassName} />
             {additionalPreviews.length > 0 && (
               <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
                 {additionalPreviews.map((preview, index) => <ImagePreview key={preview} src={preview} label={`Image supplémentaire ${index + 1}`} />)}
@@ -902,7 +1082,7 @@ function ProductEditor({
         </div>
       </FormSection>
 
-      <button type="submit" className="w-full rounded-xl bg-black py-3.5 font-black text-white shadow-sm transition hover:bg-[#c9a227] xl:col-span-12">{submitLabel}</button>
+      <button type="submit" disabled={isSubmitting} className="w-full rounded-xl bg-black py-3.5 font-black text-white shadow-sm transition hover:bg-[#c9a227] disabled:cursor-wait disabled:opacity-60 xl:col-span-12">{submitLabel}</button>
     </form>
   );
 }

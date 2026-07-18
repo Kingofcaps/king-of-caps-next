@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
-import { createFedaPayCheckout } from "@/app/lib/fedapay";
+import {
+  createFedaPayCheckout,
+  isFedaPayConfigured,
+  ONLINE_PAYMENT_UNAVAILABLE_MESSAGE,
+} from "@/app/lib/fedapay";
 import { notifyNewOrder, sendCustomerOrderConfirmation } from "@/app/lib/order-notifications";
 import {
   createOrder,
   createOrderNumber,
+  markOrderStockReserved,
   type PaymentMethod,
 } from "@/app/lib/orders";
 import { parsePrice } from "@/app/lib/prices";
@@ -53,6 +58,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Veuillez saisir une adresse e-mail valide." }, { status: 400 });
     }
 
+    const isOnlinePayment = body.paymentMethod === "mobile_money" || body.paymentMethod === "card";
+    if (isOnlinePayment && !isFedaPayConfigured()) {
+      return NextResponse.json(
+        { success: false, error: ONLINE_PAYMENT_UNAVAILABLE_MESSAGE },
+        { status: 503 },
+      );
+    }
+
     try {
       const product = await getProduct(productId);
       if (!product || !product.inStock || product.stockQuantity < quantity) {
@@ -61,8 +74,9 @@ export async function POST(request: Request) {
       const unitPrice = parsePrice(product.price);
       if (!unitPrice) throw new Error("Le prix du produit est invalide.");
 
-      const order = await createOrder({
-        order_number: await createOrderNumber(),
+      const orderNumber = await createOrderNumber();
+      const orderDetails = {
+        order_number: orderNumber,
         product_id: product.id,
         product_name: product.name,
         product_image: product.image,
@@ -78,11 +92,36 @@ export async function POST(request: Request) {
         customer_note: text(body.note) || null,
         payment_method: body.paymentMethod,
         payment_status: "pending",
-        order_status: "new",
+        stock_reserved_at: null,
+        notifications_sent_at: null,
+      } as const;
+
+      if (isOnlinePayment) {
+        const checkout = await createFedaPayCheckout({
+          order_number: orderNumber,
+          total_amount: orderDetails.total_amount,
+          customer_first_name: firstName,
+          customer_last_name: lastName,
+          customer_email: email,
+          customer_phone: phone,
+        });
+        await createOrder({
+          ...orderDetails,
+          order_status: "awaiting_payment",
+          fedapay_transaction_id: checkout.transactionId,
+        });
+        return NextResponse.json({ success: true, checkoutUrl: checkout.url });
+      }
+
+      const order = await createOrder({
+        ...orderDetails,
+        order_status: "pending",
+        fedapay_transaction_id: null,
       });
 
       try {
         const updatedProduct = await reserveProductStock(product.id, quantity);
+        await markOrderStockReserved(order.id);
         await recordStockMovementSafely({
           productId: updatedProduct.id,
           productName: updatedProduct.name,
@@ -111,12 +150,7 @@ export async function POST(request: Request) {
         console.error(`Échec de la confirmation client pour la commande ${order.order_number}.`);
       }
 
-      if (body.paymentMethod === "cash_on_delivery") {
-        return NextResponse.json({ success: true, orderNumber: order.order_number });
-      }
-
-      const checkout = await createFedaPayCheckout(order);
-      return NextResponse.json({ success: true, orderNumber: order.order_number, checkoutUrl: checkout.url });
+      return NextResponse.json({ success: true, orderNumber: order.order_number });
     } catch (error) {
       if (error instanceof InsufficientStockError) {
         return NextResponse.json({ success: false, error: error.message }, { status: 400 });

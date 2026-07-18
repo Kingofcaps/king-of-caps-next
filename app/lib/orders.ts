@@ -1,6 +1,6 @@
 export type PaymentMethod = "cash_on_delivery" | "mobile_money" | "card";
 export type PaymentStatus = "pending" | "paid" | "failed";
-export type OrderStatus = "new" | "confirmed" | "preparing" | "delivered" | "cancelled";
+export type OrderStatus = "new" | "pending" | "awaiting_payment" | "confirmed" | "preparing" | "delivered" | "cancelled";
 
 export type Order = {
   id: string;
@@ -21,6 +21,9 @@ export type Order = {
   payment_method: PaymentMethod;
   payment_status: PaymentStatus;
   order_status: OrderStatus;
+  fedapay_transaction_id: string | null;
+  stock_reserved_at: string | null;
+  notifications_sent_at: string | null;
   created_at: string;
 };
 
@@ -51,6 +54,28 @@ async function supabaseRequest(path: string, init: RequestInit = {}) {
   });
 
   if (!response.ok) {
+    const rawError = await response.text();
+    let errorDetails: {
+      code?: string;
+      message?: string;
+      details?: string | null;
+      hint?: string | null;
+    } = {};
+
+    try {
+      errorDetails = JSON.parse(rawError) as typeof errorDetails;
+    } catch {
+      errorDetails = { message: rawError };
+    }
+
+    console.error("Supabase a refusé une requête orders :", {
+      status: response.status,
+      code: errorDetails.code ?? null,
+      message: errorDetails.message ?? null,
+      details: errorDetails.details ?? null,
+      hint: errorDetails.hint ?? null,
+    });
+
     throw new Error(`Supabase a refusé la requête (${response.status}).`);
   }
 
@@ -137,4 +162,49 @@ export async function updateOrderByNumber(orderNumber: string, updates: Partial<
   });
   const [order] = (await response.json()) as Order[];
   return order;
+}
+
+type FedaPayTransition = {
+  processed: boolean;
+  order: Order;
+};
+
+export async function approveFedaPayOrder(transactionId: string, eventId: string) {
+  const response = await supabaseRequest("rpc/approve_fedapay_order", {
+    method: "POST",
+    body: JSON.stringify({ p_transaction_id: transactionId, p_event_id: eventId }),
+  });
+  return (await response.json()) as FedaPayTransition;
+}
+
+export async function failFedaPayOrder(transactionId: string, eventId: string, eventName: "transaction.declined" | "transaction.canceled") {
+  const response = await supabaseRequest("rpc/fail_fedapay_order", {
+    method: "POST",
+    body: JSON.stringify({
+      p_transaction_id: transactionId,
+      p_event_id: eventId,
+      p_event_name: eventName,
+    }),
+  });
+  return (await response.json()) as FedaPayTransition;
+}
+
+export async function markOrderNotificationsSent(id: string) {
+  const response = await supabaseRequest(`orders?id=eq.${encodeURIComponent(id)}&notifications_sent_at=is.null`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({ notifications_sent_at: new Date().toISOString() }),
+  });
+  const [order] = (await response.json()) as Order[];
+  return order ?? null;
+}
+
+export async function markOrderStockReserved(id: string) {
+  const response = await supabaseRequest(`orders?id=eq.${encodeURIComponent(id)}&stock_reserved_at=is.null`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({ stock_reserved_at: new Date().toISOString() }),
+  });
+  const [order] = (await response.json()) as Order[];
+  return order ?? null;
 }

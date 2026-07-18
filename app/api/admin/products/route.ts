@@ -1,11 +1,10 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { ADMIN_COOKIE, isAdminToken } from "@/app/lib/admin-auth";
 import { getProducts, insertProduct, type Product } from "@/app/lib/products";
 import { recordStockMovementSafely } from "@/app/lib/stock-movements";
+import { deleteProductImages, uploadProductImage } from "@/app/lib/product-images";
 
 export const runtime = "nodejs";
 
@@ -27,19 +26,6 @@ function getQuantity(formData: FormData) {
   return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 }
 
-async function saveUpload(file: File) {
-  if (!file.type.startsWith("image/")) {
-    throw new Error("Veuillez sélectionner une image valide.");
-  }
-
-  const extension = file.name.split(".").pop()?.replace(/[^a-zA-Z0-9]/g, "") || "jpg";
-  const filename = `${randomUUID()}.${extension.toLowerCase()}`;
-  const uploadsDir = path.join(process.cwd(), "public", "uploads");
-  await mkdir(uploadsDir, { recursive: true });
-  await writeFile(path.join(uploadsDir, filename), Buffer.from(await file.arrayBuffer()));
-  return `/uploads/${filename}`;
-}
-
 export async function GET() {
   if (!(await isAuthorized())) return unauthorized();
   return NextResponse.json(await getProducts());
@@ -48,6 +34,7 @@ export async function GET() {
 export async function POST(request: Request) {
   if (!(await isAuthorized())) return unauthorized();
 
+  const uploadedUrls: string[] = [];
   try {
     const formData = await request.formData();
     const name = getText(formData, "name");
@@ -61,16 +48,24 @@ export async function POST(request: Request) {
     if (!name || !price) {
       return NextResponse.json({ error: "Le nom et le prix sont obligatoires." }, { status: 400 });
     }
+    if (!(primaryFile instanceof File) || primaryFile.size === 0) {
+      return NextResponse.json({ error: "Veuillez sélectionner une image principale." }, { status: 400 });
+    }
     if (additionalFiles.length > 5) {
       return NextResponse.json({ error: "Vous pouvez ajouter jusqu’à 5 images supplémentaires." }, { status: 400 });
     }
 
     const products = await getProducts();
-    const uploadedPrimary = primaryFile instanceof File && primaryFile.size > 0
-      ? await saveUpload(primaryFile)
-      : undefined;
-    const uploadedImages = await Promise.all(additionalFiles.map(saveUpload));
-    const image = uploadedPrimary ?? uploadedImages[0] ?? "/images/logo.jpg";
+    const productId = randomUUID();
+    const upload = async (file: File) => {
+      const uploaded = await uploadProductImage(file, productId);
+      uploadedUrls.push(uploaded.publicUrl);
+      return uploaded.publicUrl;
+    };
+    const uploadedPrimary = await upload(primaryFile);
+    const uploadedImages: string[] = [];
+    for (const file of additionalFiles) uploadedImages.push(await upload(file));
+    const image = uploadedPrimary;
     const stockQuantity = getQuantity(formData);
     const available = stockQuantity > 0;
     const firstSortOrder = products.reduce(
@@ -78,7 +73,7 @@ export async function POST(request: Request) {
       0,
     );
     const product: Product = {
-      id: randomUUID(),
+      id: productId,
       name,
       price,
       description,
@@ -109,6 +104,13 @@ export async function POST(request: Request) {
     });
     return NextResponse.json(createdProduct, { status: 201 });
   } catch (error) {
+    if (uploadedUrls.length > 0) {
+      try {
+        await deleteProductImages(uploadedUrls);
+      } catch (cleanupError) {
+        console.error("Product image cleanup failed:", cleanupError);
+      }
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Impossible d’ajouter ce produit." },
       { status: 400 },

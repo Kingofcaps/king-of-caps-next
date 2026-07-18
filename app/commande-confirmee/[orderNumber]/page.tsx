@@ -18,6 +18,7 @@ export default async function OrderConfirmationPage({
   const { orderNumber } = await params;
   const order = await getOrderByNumber(orderNumber);
   if (!order) notFound();
+  if (order.payment_method !== "cash_on_delivery" && (order.payment_status !== "paid" || order.order_status !== "confirmed")) notFound();
 
   return (
     <main className="min-h-screen bg-[#fafafa] px-5 py-10 text-zinc-900 sm:px-8 sm:py-16">

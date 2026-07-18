@@ -7,12 +7,23 @@ const localNetworkOrigins = Object.values(networkInterfaces()).flatMap((addresse
     .map((address) => address.address),
 );
 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const productImageRemotePatterns = supabaseUrl
+  ? [{
+      protocol: "https" as const,
+      hostname: new URL(supabaseUrl).hostname,
+      port: "",
+      pathname: "/storage/v1/object/public/product-images/**",
+    }]
+  : [];
+
 const nextConfig: NextConfig = {
   allowedDevOrigins: [...new Set([
     "127.0.0.1",
     "admin.kingofcaps.bj",
     ...localNetworkOrigins,
   ])],
+  images: { remotePatterns: productImageRemotePatterns },
 };
 
 export default nextConfig;

@@ -1,10 +1,8 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { ADMIN_COOKIE, isAdminToken } from "@/app/lib/admin-auth";
 import { getProduct, replaceProduct } from "@/app/lib/products";
+import { deleteProductImages, uploadProductImage } from "@/app/lib/product-images";
 
 export const runtime = "nodejs";
 
@@ -20,6 +18,7 @@ export async function POST(
     return NextResponse.json({ error: "Non autorisé." }, { status: 401 });
   }
 
+  const uploadedUrls: string[] = [];
   try {
     const { id } = await context.params;
     const formData = await request.formData();
@@ -37,26 +36,17 @@ export async function POST(
     if (additionalFiles.length > 5) {
       return NextResponse.json({ error: "Vous pouvez ajouter jusqu’à 5 images supplémentaires." }, { status: 400 });
     }
-    if (file instanceof File && file.size > 0 && !file.type.startsWith("image/")) {
-      return NextResponse.json({ error: "Veuillez sélectionner une image valide." }, { status: 400 });
-    }
-    if (additionalFiles.some((item) => !item.type.startsWith("image/"))) {
-      return NextResponse.json({ error: "Veuillez sélectionner des images valides." }, { status: 400 });
-    }
-
     const product = await getProduct(id);
     if (!product) return NextResponse.json({ error: "Produit introuvable." }, { status: 404 });
 
-    const uploadsDir = path.join(process.cwd(), "public", "uploads");
-    await mkdir(uploadsDir, { recursive: true });
     const saveFile = async (imageFile: File) => {
-      const extension = imageFile.name.split(".").pop()?.replace(/[^a-zA-Z0-9]/g, "") || "jpg";
-      const filename = `${randomUUID()}.${extension.toLowerCase()}`;
-      await writeFile(path.join(uploadsDir, filename), Buffer.from(await imageFile.arrayBuffer()));
-      return `/uploads/${filename}`;
+      const uploaded = await uploadProductImage(imageFile, id);
+      uploadedUrls.push(uploaded.publicUrl);
+      return uploaded.publicUrl;
     };
     const primaryImage = file instanceof File && file.size > 0 ? await saveFile(file) : undefined;
-    const uploadedImages = await Promise.all(additionalFiles.map(saveFile));
+    const uploadedImages: string[] = [];
+    for (const additionalFile of additionalFiles) uploadedImages.push(await saveFile(additionalFile));
     const image = primaryImage ?? product.image;
 
     const nextProduct = {
@@ -65,9 +55,26 @@ export async function POST(
       images: Array.from(new Set([image, ...product.images, ...uploadedImages])).slice(0, 6),
     };
     const updatedProduct = await replaceProduct(nextProduct);
-    if (!updatedProduct) return NextResponse.json({ error: "Produit introuvable." }, { status: 404 });
+    if (!updatedProduct) throw new Error("Produit introuvable.");
+    if (primaryImage) {
+      try {
+        await deleteProductImages([product.image]);
+      } catch (cleanupError) {
+        console.error("Previous product image cleanup failed:", cleanupError);
+      }
+    }
     return NextResponse.json(updatedProduct);
-  } catch {
-    return NextResponse.json({ error: "Impossible de mettre à jour l’image." }, { status: 400 });
+  } catch (error) {
+    if (uploadedUrls.length > 0) {
+      try {
+        await deleteProductImages(uploadedUrls);
+      } catch (cleanupError) {
+        console.error("Replacement image cleanup failed:", cleanupError);
+      }
+    }
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Impossible de mettre à jour l’image." },
+      { status: 400 },
+    );
   }
 }

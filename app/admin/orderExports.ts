@@ -5,7 +5,7 @@ export type ExportDateFilter = "all" | "today" | "week" | "month" | "custom";
 
 const paymentLabels = { cash_on_delivery: "Paiement à la livraison", mobile_money: "Mobile Money", card: "Carte bancaire" } as const;
 const paymentStatusLabels = { pending: "En attente", paid: "Payé", failed: "Échec" } as const;
-const orderStatusLabels = { new: "Nouvelle", confirmed: "Confirmée", preparing: "En préparation", delivered: "Livrée", cancelled: "Annulée" } as const;
+const orderStatusLabels = { new: "Nouvelle", pending: "En attente", awaiting_payment: "Paiement en attente", confirmed: "Confirmée", preparing: "En préparation", delivered: "Livrée", cancelled: "Annulée" } as const;
 
 function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());

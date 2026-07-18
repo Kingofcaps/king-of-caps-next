@@ -9,7 +9,9 @@ import { formatDualPrice, parsePrice } from "@/app/lib/prices";
 import type { Product } from "@/app/lib/products";
 import { isValidEmail } from "@/app/lib/validation";
 
-export default function CheckoutForm({ product }: { product: Product }) {
+const ONLINE_PAYMENT_UNAVAILABLE_MESSAGE = "Le paiement en ligne est temporairement indisponible. Choisissez le paiement à la livraison.";
+
+export default function CheckoutForm({ product, onlinePaymentsEnabled }: { product: Product; onlinePaymentsEnabled: boolean }) {
   const router = useRouter();
   const submissionStarted = useRef(false);
   const [firstName, setFirstName] = useState("");
@@ -29,11 +31,21 @@ export default function CheckoutForm({ product }: { product: Product }) {
   const stockQuantity = Math.max(0, product.stockQuantity);
   const isOutOfStock = !product.inStock || stockQuantity === 0;
   const isStockReached = quantity >= stockQuantity;
+  const isUnavailableOnlinePayment = !onlinePaymentsEnabled && paymentMethod !== "cash_on_delivery";
+
+  function handlePaymentMethodChange(value: PaymentMethod) {
+    setPaymentMethod(value);
+    setError("");
+  }
 
   async function handleOrder() {
     if (submissionStarted.current || loading) return;
     if (isOutOfStock) {
       setError("Stock insuffisant pour ce produit.");
+      return;
+    }
+    if (isUnavailableOnlinePayment) {
+      setError(ONLINE_PAYMENT_UNAVAILABLE_MESSAGE);
       return;
     }
 
@@ -56,11 +68,16 @@ export default function CheckoutForm({ product }: { product: Product }) {
 
     try {
       const response = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(orderPayload) });
-      const result = (await response.json()) as { success?: boolean; orderNumber?: string; error?: string };
+      const result = (await response.json()) as { success?: boolean; orderNumber?: string; checkoutUrl?: string; error?: string };
       if (!response.ok || !result.success) throw new Error(result.error ?? "Impossible de créer la commande.");
-      if (!result.orderNumber) throw new Error("La commande a été créée sans numéro de référence.");
       orderCreated = true;
-      router.push(`/commande-confirmee/${result.orderNumber}`);
+      if (paymentMethod === "cash_on_delivery") {
+        if (!result.orderNumber) throw new Error("La commande a été créée sans numéro de référence.");
+        router.push(`/commande-confirmee/${result.orderNumber}`);
+      } else {
+        if (!result.checkoutUrl) throw new Error("FedaPay n’a pas retourné d’URL de paiement.");
+        window.location.assign(result.checkoutUrl);
+      }
     } catch (submissionError) {
       console.error("Erreur lors de l’envoi de la commande :", submissionError);
       setError(submissionError instanceof Error ? submissionError.message : "Impossible de créer la commande.");
@@ -109,18 +126,19 @@ export default function CheckoutForm({ product }: { product: Product }) {
           </CheckoutCard>
 
           <CheckoutCard title="Paiement">
-            <PaymentOption value="cash_on_delivery" selected={paymentMethod} onChange={setPaymentMethod} title="Paiement à la livraison" description="Payez lorsque votre commande vous est remise." />
-            <PaymentOption value="mobile_money" selected={paymentMethod} onChange={setPaymentMethod} title="Mobile Money" description="Vous serez redirigé vers le checkout sécurisé FedaPay." />
-            <PaymentOption value="card" selected={paymentMethod} onChange={setPaymentMethod} title="Carte bancaire" description="Le paiement est traité uniquement par la page sécurisée FedaPay." />
+            <PaymentOption value="cash_on_delivery" selected={paymentMethod} onChange={handlePaymentMethodChange} title="Paiement à la livraison" description="Payez lorsque votre commande vous est remise." />
+            <PaymentOption value="mobile_money" selected={paymentMethod} onChange={handlePaymentMethodChange} title="Mobile Money" description="Vous serez redirigé vers le checkout sécurisé FedaPay." />
+            <PaymentOption value="card" selected={paymentMethod} onChange={handlePaymentMethodChange} title="Carte bancaire" description="Le paiement est traité uniquement par la page sécurisée FedaPay." />
           </CheckoutCard>
 
+          {isUnavailableOnlinePayment && <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">{ONLINE_PAYMENT_UNAVAILABLE_MESSAGE}</p>}
           {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p>}
           {isOutOfStock && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">Rupture de stock.</p>}
           <div className="relative z-[9999] pointer-events-auto">
             <button
               type="button"
               onClick={handleOrder}
-              disabled={loading || isOutOfStock}
+              disabled={loading || isOutOfStock || isUnavailableOnlinePayment}
               style={{ position: "relative", zIndex: 9999, pointerEvents: "auto" }}
               className="relative z-[9999] w-full pointer-events-auto rounded-xl bg-black py-4 font-black text-white transition hover:bg-[#c9a227] disabled:opacity-60"
             >

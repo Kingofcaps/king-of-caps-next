@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { ADMIN_COOKIE, isAdminToken } from "@/app/lib/admin-auth";
 import { getProduct, removeProduct, replaceProduct } from "@/app/lib/products";
 import { recordStockMovementSafely } from "@/app/lib/stock-movements";
+import { deleteProductImages } from "@/app/lib/product-images";
 
 export const runtime = "nodejs";
 
@@ -69,5 +70,6 @@ export async function DELETE(_request: Request, context: RouteContext<"/api/admi
   const product = await getProduct(id);
   if (!product) return NextResponse.json({ error: "Produit introuvable." }, { status: 404 });
   await removeProduct(id);
+  await deleteProductImages([product.image, ...product.images]);
   return NextResponse.json({ ok: true });
 }

@@ -76,7 +76,9 @@ async function supabaseProductsRequest(path: string, init: RequestInit = {}) {
 
 function normalizeImages(value: unknown, primaryImage: string) {
   const additionalImages = Array.isArray(value)
-    ? value.filter((image): image is string => typeof image === "string" && image.startsWith("/"))
+    ? value.filter((image): image is string =>
+        typeof image === "string" && (image.startsWith("/") || /^https:\/\//i.test(image)),
+      )
     : [];
   return Array.from(new Set([primaryImage, ...additionalImages])).slice(0, 6);
 }

@@ -22,6 +22,11 @@ function TrendingCard({ product, duplicate = false }: { product: Product; duplic
           sizes="(max-width: 767px) 40vw, (max-width: 1279px) 176px, 192px"
           className="object-cover object-center transition duration-500 group-hover:scale-[1.03]"
         />
+        {product.images.length > 1 && (
+          <span className="absolute bottom-2 right-2 rounded-full bg-black/65 px-2 py-1 text-[10px] font-bold text-white shadow-sm backdrop-blur-sm">
+            {product.images.length} photos
+          </span>
+        )}
       </div>
       <div className="px-2 py-1.5 text-center sm:py-2">
         <span className="block text-[10px] font-black tracking-[0.1em] text-[#c9a227] transition group-hover:text-black sm:text-xs">

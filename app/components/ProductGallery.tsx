@@ -67,6 +67,11 @@ export default function ProductGallery({ products }: { products: Product[] }) {
                     sizes="(max-width: 639px) 33vw, (max-width: 1023px) 50vw, 25vw"
                     className="object-cover object-center transition duration-500 group-hover:scale-105"
                   />
+                  {product.images.length > 1 && (
+                    <span className="absolute bottom-2 right-2 rounded-full bg-black/65 px-2 py-1 text-[9px] font-bold text-white shadow-sm backdrop-blur-sm sm:text-xs">
+                      {product.images.length} photos
+                    </span>
+                  )}
                 </div>
               </Link>
               <div className="p-2.5 sm:p-4">
