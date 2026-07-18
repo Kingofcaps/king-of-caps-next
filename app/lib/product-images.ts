@@ -20,6 +20,19 @@ function getStorageClient() {
     throw new Error("Supabase Storage n’est pas configuré côté serveur.");
   }
 
+  if (url !== url.trim()) {
+    throw new Error("NEXT_PUBLIC_SUPABASE_URL contient un espace ou un retour à la ligne.");
+  }
+
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
+      throw new Error("Protocole Supabase invalide.");
+    }
+  } catch {
+    throw new Error("NEXT_PUBLIC_SUPABASE_URL n’est pas une URL HTTP(S) valide.");
+  }
+
   return createClient(url, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -73,14 +86,26 @@ export async function uploadProductImage(file: File, productId: string) {
   return { path, publicUrl: data.publicUrl };
 }
 
-export function getProductImageStoragePath(imageUrl: string) {
+export function getProductImageStoragePath(imageUrl: string | null | undefined) {
+  if (!imageUrl) return null;
+
+  const normalizedImageUrl = imageUrl.trim();
+  if (
+    !normalizedImageUrl
+    || normalizedImageUrl.startsWith("/images/")
+    || normalizedImageUrl.startsWith("/uploads/")
+  ) {
+    return null;
+  }
+
   try {
-    const url = new URL(imageUrl);
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    if (!supabaseUrl || url.origin !== new URL(supabaseUrl).origin) return null;
+    const url = new URL(normalizedImageUrl);
     const marker = `/storage/v1/object/public/${PRODUCT_IMAGES_BUCKET}/`;
     const markerIndex = url.pathname.indexOf(marker);
     if (markerIndex === -1) return null;
+
+    const configuredUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!configuredUrl || url.origin !== new URL(configuredUrl).origin) return null;
 
     const encodedPath = url.pathname.slice(markerIndex + marker.length);
     if (!encodedPath) return null;

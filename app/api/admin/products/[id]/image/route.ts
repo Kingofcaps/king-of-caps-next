@@ -52,7 +52,13 @@ export async function POST(
     const nextProduct = {
       ...product,
       image,
-      images: Array.from(new Set([image, ...product.images, ...uploadedImages])).slice(0, 6),
+      images: Array.from(
+        new Set([
+          image,
+          ...product.images.filter((existingImage) => existingImage !== product.image),
+          ...uploadedImages,
+        ]),
+      ).slice(0, 6),
     };
     const updatedProduct = await replaceProduct(nextProduct);
     if (!updatedProduct) throw new Error("Produit introuvable.");
@@ -65,6 +71,7 @@ export async function POST(
     }
     return NextResponse.json(updatedProduct);
   } catch (error) {
+    console.error("Product image update failed:", error);
     if (uploadedUrls.length > 0) {
       try {
         await deleteProductImages(uploadedUrls);

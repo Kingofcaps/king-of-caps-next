@@ -5,20 +5,33 @@ import { useMemo, useRef, useState, type TouchEvent } from "react";
 
 export default function ProductImageGallery({
   productName,
-  primaryImage,
-  images,
+  mainImage,
+  additionalImages,
 }: {
   productName: string;
-  primaryImage: string;
-  images: string[];
+  mainImage: string;
+  additionalImages: string[];
 }) {
+  const thumbnailImages = useMemo(
+    () => Array.from(new Set(additionalImages))
+      .filter((image) => image.trim() !== "" && image !== mainImage),
+    [additionalImages, mainImage],
+  );
   const galleryImages = useMemo(
-    () => Array.from(new Set([primaryImage, ...images])).filter((image) => image.trim() !== ""),
-    [images, primaryImage],
+    () => [mainImage, ...thumbnailImages],
+    [mainImage, thumbnailImages],
   );
   const [activeIndex, setActiveIndex] = useState(0);
   const touchStartXRef = useRef<number | null>(null);
-  const activeImage = galleryImages[activeIndex] ?? primaryImage;
+  const activeImage = galleryImages[activeIndex] ?? mainImage;
+
+  function showPreviousImage() {
+    setActiveIndex((current) => Math.max(current - 1, 0));
+  }
+
+  function showNextImage() {
+    setActiveIndex((current) => Math.min(current + 1, galleryImages.length - 1));
+  }
 
   function handleTouchStart(event: TouchEvent<HTMLDivElement>) {
     touchStartXRef.current = event.touches[0]?.clientX ?? null;
@@ -54,23 +67,43 @@ export default function ProductImageGallery({
           className="object-cover"
         />
         {galleryImages.length > 1 && (
-          <span className="absolute bottom-3 right-3 rounded-full bg-black/65 px-2.5 py-1 text-xs font-bold text-white backdrop-blur-sm">
-            {activeIndex + 1} / {galleryImages.length}
-          </span>
+          <>
+            <button
+              type="button"
+              onClick={showPreviousImage}
+              disabled={activeIndex === 0}
+              aria-label="Afficher la photo précédente"
+              className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/60 px-3 py-2 text-xl font-bold text-white backdrop-blur-sm transition hover:bg-black/75 disabled:pointer-events-none disabled:opacity-30"
+            >
+              ←
+            </button>
+            <button
+              type="button"
+              onClick={showNextImage}
+              disabled={activeIndex === galleryImages.length - 1}
+              aria-label="Afficher la photo suivante"
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/60 px-3 py-2 text-xl font-bold text-white backdrop-blur-sm transition hover:bg-black/75 disabled:pointer-events-none disabled:opacity-30"
+            >
+              →
+            </button>
+            <span className="absolute bottom-3 right-3 rounded-full bg-black/65 px-2.5 py-1 text-xs font-bold text-white backdrop-blur-sm">
+              {activeIndex + 1} / {galleryImages.length}
+            </span>
+          </>
         )}
       </div>
 
-      {galleryImages.length > 1 && (
+      {thumbnailImages.length > 0 && (
         <div className="mt-3 flex max-w-full gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]" aria-label="Photos du produit">
-          {galleryImages.map((image, index) => (
+          {thumbnailImages.map((image, index) => (
             <button
               key={image}
               data-image-url={image}
               type="button"
-              onClick={() => setActiveIndex(index)}
-              aria-label={`Afficher la photo ${index + 1} sur ${galleryImages.length}`}
-              aria-current={index === activeIndex ? "true" : undefined}
-              className={`relative aspect-square w-[calc((100%-1.5rem)/4)] min-w-[72px] max-w-24 shrink-0 overflow-hidden rounded-xl border-2 bg-zinc-100 transition ${index === activeIndex ? "border-[#c9a227]" : "border-transparent hover:border-zinc-300"}`}
+              onClick={() => setActiveIndex(index + 1)}
+              aria-label={`Afficher la photo ${index + 2} sur ${galleryImages.length}`}
+              aria-current={index + 1 === activeIndex ? "true" : undefined}
+              className={`relative aspect-square w-[calc((100%-1.5rem)/4)] min-w-[72px] max-w-24 shrink-0 overflow-hidden rounded-xl border-2 bg-zinc-100 transition ${index + 1 === activeIndex ? "border-[#c9a227]" : "border-transparent hover:border-zinc-300"}`}
             >
               <Image src={image} alt="" fill sizes="96px" className="object-cover" />
             </button>

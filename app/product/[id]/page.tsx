@@ -61,6 +61,8 @@ export default async function ProductPage({
 
   if (!product) notFound();
 
+  const additionalImages = Array.from(new Set(product.images))
+    .filter((image) => image !== product.image);
   const orderMessage = `Bonjour KING OF CAPS, je souhaite commander ${product.name} au prix de ${formatDualPrice(product.price)}.`;
   const orderUrl = `${WHATSAPP_URL}?text=${encodeURIComponent(orderMessage)}`;
   const productUrl = absoluteUrl(`/product/${product.id}`);
@@ -118,7 +120,11 @@ export default async function ProductPage({
       </header>
 
       <section className="mx-auto grid max-w-7xl gap-10 px-5 py-10 sm:px-8 sm:py-16 lg:grid-cols-2 lg:items-center lg:gap-16">
-        <ProductImageGallery productName={product.name} primaryImage={product.image} images={product.images} />
+        <ProductImageGallery
+          productName={product.name}
+          mainImage={product.image}
+          additionalImages={additionalImages}
+        />
 
         <div className="lg:py-8">
           <Link
