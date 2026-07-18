@@ -28,6 +28,13 @@ type ProductSort = "newest" | "name_asc" | "price_asc" | "price_desc" | "stock_a
 type OrdersFilter = "all" | OrderStatus | "payment_pending" | "paid";
 type OrdersDateFilter = "all" | "today" | "last_7_days" | "last_30_days";
 type OrdersSort = "newest" | "oldest" | "amount_asc" | "amount_desc";
+type BulkDeleteResult = {
+  deletedIds: string[];
+  deletedCount: number;
+  failedCount: number;
+  failures: Array<{ id: string; error: string }>;
+  imageCleanupWarning: string | null;
+};
 
 const emptyProduct: ProductForm = {
   name: "",
@@ -116,6 +123,9 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
   const [editedImages, setEditedImages] = useState<File[]>([]);
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
+  const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
+  const [isDeletingSelectedProducts, setIsDeletingSelectedProducts] = useState(false);
   const [updatingStockIds, setUpdatingStockIds] = useState<Set<string>>(new Set());
   const [restockingProduct, setRestockingProduct] = useState<Product | null>(null);
   const [restockQuantity, setRestockQuantity] = useState("");
@@ -659,9 +669,63 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     try {
       await readResponse(await fetch(`/api/admin/products/${id}`, { method: "DELETE" }));
       setProducts((current) => current.filter((product) => product.id !== id));
+      setSelectedProductIds((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
       setMessage("Produit supprimé.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Impossible de supprimer le produit.");
+    }
+  }
+
+  function toggleProductSelection(productId: string) {
+    setSelectedProductIds((current) => {
+      const next = new Set(current);
+      if (next.has(productId)) next.delete(productId);
+      else next.add(productId);
+      return next;
+    });
+  }
+
+  function selectAllFilteredProducts() {
+    setSelectedProductIds(new Set(filteredProducts.map((product) => product.id)));
+  }
+
+  function clearProductSelection() {
+    setSelectedProductIds(new Set());
+  }
+
+  async function deleteSelectedProducts() {
+    if (selectedProductIds.size === 0 || isDeletingSelectedProducts) return;
+
+    setIsDeletingSelectedProducts(true);
+    setMessage("");
+    try {
+      const result = await readResponse<BulkDeleteResult>(await fetch("/api/admin/products/bulk", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productIds: Array.from(selectedProductIds) }),
+      }));
+
+      const deletedIds = new Set(result.deletedIds);
+      setProducts((current) => current.filter((product) => !deletedIds.has(product.id)));
+      clearProductSelection();
+      setIsBulkDeleteConfirmOpen(false);
+
+      const deletionMessage = result.failedCount > 0
+        ? `${result.deletedCount} produit${result.deletedCount > 1 ? "s" : ""} supprimé${result.deletedCount > 1 ? "s" : ""}, ${result.failedCount} échec${result.failedCount > 1 ? "s" : ""}.`
+        : `${result.deletedCount} produit${result.deletedCount > 1 ? "s" : ""} supprimé${result.deletedCount > 1 ? "s" : ""} avec succès.`;
+      const failureExplanation = result.failedCount > 0 && result.failures[0]
+        ? ` ${result.failures[0].error}`
+        : "";
+      const cleanupExplanation = result.imageCleanupWarning ? ` ${result.imageCleanupWarning}` : "";
+      setMessage(`${deletionMessage}${failureExplanation}${cleanupExplanation}`);
+    } catch {
+      setMessage("Impossible de supprimer la sélection. Réessayez.");
+    } finally {
+      setIsDeletingSelectedProducts(false);
     }
   }
 
@@ -842,11 +906,34 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
               {message && <p className="text-sm font-semibold text-[#a8861e]">{message}</p>}
             </div>
 
+            {selectedProductIds.size > 0 && (
+              <div className="sticky bottom-3 z-40 mt-5 flex flex-col gap-3 rounded-2xl border border-[#c9a227]/50 bg-white/95 p-4 shadow-xl backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+                <p className="font-black text-zinc-900">
+                  {selectedProductIds.size} produit{selectedProductIds.size > 1 ? "s" : ""} sélectionné{selectedProductIds.size > 1 ? "s" : ""}
+                </p>
+                <div className="grid gap-2 sm:flex sm:flex-wrap">
+                  <button type="button" disabled={filteredProducts.length === 0 || isDeletingSelectedProducts} onClick={selectAllFilteredProducts} className="min-h-11 rounded-xl border border-[#c9a227]/50 bg-amber-50 px-4 py-2 text-sm font-bold text-[#a8861e] transition hover:border-[#c9a227] disabled:opacity-50">Tout sélectionner</button>
+                  <button type="button" disabled={isDeletingSelectedProducts} onClick={clearProductSelection} className="min-h-11 rounded-xl border border-[#e5e5e5] bg-white px-4 py-2 text-sm font-bold text-zinc-700 transition hover:border-zinc-400 disabled:opacity-50">Annuler la sélection</button>
+                  <button type="button" disabled={isDeletingSelectedProducts} onClick={() => setIsBulkDeleteConfirmOpen(true)} className="min-h-11 rounded-xl bg-red-600 px-4 py-2 text-sm font-black text-white transition hover:bg-red-700 disabled:cursor-wait disabled:opacity-60">{isDeletingSelectedProducts ? "Suppression en cours…" : "Supprimer la sélection"}</button>
+                </div>
+              </div>
+            )}
+
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {filteredProducts.map((product) => (
-                <article key={product.id} className="overflow-hidden rounded-2xl border border-[#e5e5e5] bg-white shadow-sm">
+                <article key={product.id} className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition ${selectedProductIds.has(product.id) ? "border-[#c9a227] ring-2 ring-[#c9a227]/25" : "border-[#e5e5e5]"}`}>
                   <div className="relative aspect-square w-full overflow-hidden rounded-t-2xl">
                     <Image src={product.image} alt={product.name} fill sizes="(max-width: 768px) 50vw, (max-width: 1200px) 25vw, 20vw" className="object-cover" />
+                    <label className="absolute left-3 top-3 flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-xl border border-black/10 bg-white/95 shadow-md backdrop-blur" onClick={(event) => event.stopPropagation()}>
+                      <span className="sr-only">Sélectionner {product.name}</span>
+                      <input
+                        type="checkbox"
+                        checked={selectedProductIds.has(product.id)}
+                        onChange={() => toggleProductSelection(product.id)}
+                        aria-label={`Sélectionner ${product.name}`}
+                        className="h-6 w-6 cursor-pointer accent-[#c9a227]"
+                      />
+                    </label>
                   </div>
                   <div className="p-3">
                     <div className="flex items-start justify-between gap-3">
@@ -881,6 +968,21 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
             {filteredProducts.length === 0 && <div className="mt-5 rounded-2xl border border-dashed border-[#e5e5e5] bg-white px-5 py-12 text-center text-sm font-semibold text-zinc-500">Aucun produit ne correspond à votre recherche ou à vos filtres.</div>}
           </section>
       </div>}
+
+      {view === "products" && isBulkDeleteConfirmOpen && selectedProductIds.size > 0 && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-5 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="bulk-delete-products-title">
+          <div className="w-full max-w-lg rounded-2xl border border-[#e5e5e5] bg-white p-6 shadow-2xl">
+            <h2 id="bulk-delete-products-title" className="text-xl font-black">Supprimer définitivement la sélection ?</h2>
+            <p className="mt-3 text-sm leading-6 text-zinc-600">
+              Voulez-vous vraiment supprimer définitivement {selectedProductIds.size} produit{selectedProductIds.size > 1 ? "s" : ""} ? Cette action supprimera aussi leurs images et ne pourra pas être annulée.
+            </p>
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button type="button" disabled={isDeletingSelectedProducts} onClick={() => setIsBulkDeleteConfirmOpen(false)} className="min-h-11 rounded-xl border border-[#e5e5e5] bg-white px-4 py-2.5 text-sm font-bold text-zinc-700 transition hover:border-zinc-400 disabled:opacity-60">Annuler</button>
+              <button type="button" disabled={isDeletingSelectedProducts} onClick={deleteSelectedProducts} className="min-h-11 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-black text-white transition hover:bg-red-700 disabled:cursor-wait disabled:opacity-60">{isDeletingSelectedProducts ? "Suppression en cours…" : "Supprimer définitivement"}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {view === "orders" && <section className="rounded-3xl border border-[#e5e5e5] bg-white p-5 shadow-sm sm:p-7">
           <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-bold tracking-[0.2em] text-[#c9a227]">COMMANDES</p><h2 className="mt-2 text-3xl font-black">Gestion des commandes</h2></div><div className="flex flex-wrap items-center gap-3"><span className={`rounded-full px-3 py-1 text-sm font-bold ${isSoundEnabled ? "bg-emerald-100 text-emerald-800" : "bg-zinc-100 text-zinc-600"}`}>{isSoundEnabled ? "Son activé" : "Son désactivé"}</span><button type="button" onClick={toggleOrderSound} className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-2.5 text-sm font-bold text-black transition hover:border-[#c9a227]">{isSoundEnabled ? "Désactiver le son" : "Activer le son"}</button><span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-bold text-[#a8861e]">{filteredOrders.length}</span><button type="button" onClick={() => { setIsExportOpen((current) => !current); setExportError(""); }} className="rounded-xl bg-black px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#c9a227]">Exporter</button></div></div>
