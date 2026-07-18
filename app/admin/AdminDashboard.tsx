@@ -21,6 +21,15 @@ type BulkProductRow = {
   stock: string;
   description: string;
   error: string;
+  analysisConfidence: number | null;
+};
+type ProductImageAnalysis = {
+  suggestedName: string;
+  brand: string;
+  category: string;
+  color: string;
+  description: string;
+  confidence: number;
 };
 type AdminView = "dashboard" | "products" | "orders";
 type ProductFilter = "all" | "in_stock" | "low_stock" | "out_of_stock" | "featured" | "new_arrival";
@@ -118,11 +127,15 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
   const [bulkRows, setBulkRows] = useState<BulkProductRow[]>([]);
   const [bulkInputVersion, setBulkInputVersion] = useState(0);
   const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
+  const [isAnalyzingBulkImages, setIsAnalyzingBulkImages] = useState(false);
+  const [bulkAnalysisProgress, setBulkAnalysisProgress] = useState(0);
   const [editing, setEditing] = useState<Product | null>(null);
   const [editedImage, setEditedImage] = useState<File | null>(null);
   const [editedImages, setEditedImages] = useState<File[]>([]);
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isAnalyzingNewImage, setIsAnalyzingNewImage] = useState(false);
+  const [newImageAnalysisMessage, setNewImageAnalysisMessage] = useState("");
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
   const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
   const [isDeletingSelectedProducts, setIsDeletingSelectedProducts] = useState(false);
@@ -419,6 +432,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
       setNewProduct(emptyProduct);
       setNewImage(null);
       setNewImages([]);
+      setNewImageAnalysisMessage("");
       setSimpleFormVersion((current) => current + 1);
       setMessage("Produit ajouté.");
     } catch (error) {
@@ -445,6 +459,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
         stock: "1",
         description: "",
         error: "",
+        analysisConfidence: null,
       };
     });
     bulkPreviewsRef.current = rows.map((row) => row.preview);
@@ -454,6 +469,81 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
 
   function updateBulkProduct(id: string, updates: Partial<Pick<BulkProductRow, "name" | "color" | "price" | "stock" | "description">>) {
     setBulkRows((current) => current.map((row) => row.id === id ? { ...row, ...updates, error: "" } : row));
+  }
+
+  async function analyzeProductImage(file: File) {
+    const formData = new FormData();
+    formData.set("image", file);
+    return readResponse<ProductImageAnalysis>(await fetch("/api/admin/products/analyze-image", {
+      method: "POST",
+      body: formData,
+    }));
+  }
+
+  function handleNewImageChange(file: File | null) {
+    setNewImage(file);
+    setNewImageAnalysisMessage("");
+  }
+
+  async function analyzeNewProductImage() {
+    if (!newImage || isAnalyzingNewImage) return;
+
+    setIsAnalyzingNewImage(true);
+    setNewImageAnalysisMessage("Analyse en cours…");
+    try {
+      const analysis = await analyzeProductImage(newImage);
+      setNewProduct((current) => ({
+        ...current,
+        name: analysis.confidence >= 0.65 && analysis.suggestedName ? analysis.suggestedName : current.name,
+        brand: analysis.confidence >= 0.65 && analysis.brand ? analysis.brand : current.brand,
+        category: analysis.category || current.category,
+        color: analysis.color || current.color,
+        description: analysis.description || current.description,
+      }));
+      const confidence = Math.round(analysis.confidence * 100);
+      setNewImageAnalysisMessage(analysis.confidence >= 0.65
+        ? `Suggestion automatique à vérifier — confiance ${confidence} %.`
+        : `Suggestion automatique à vérifier — confiance faible (${confidence} %). Le nom reste à confirmer manuellement.`);
+    } catch (error) {
+      setNewImageAnalysisMessage(error instanceof Error ? error.message : "Impossible d’analyser cette image.");
+    } finally {
+      setIsAnalyzingNewImage(false);
+    }
+  }
+
+  async function analyzeAllBulkImages() {
+    if (bulkRows.length === 0 || isAnalyzingBulkImages) return;
+
+    const rowsToAnalyze = [...bulkRows];
+    let successCount = 0;
+    setIsAnalyzingBulkImages(true);
+    setBulkAnalysisProgress(0);
+    setMessage("");
+
+    for (let index = 0; index < rowsToAnalyze.length; index += 1) {
+      const row = rowsToAnalyze[index];
+      setBulkAnalysisProgress(index + 1);
+      try {
+        const analysis = await analyzeProductImage(row.file);
+        successCount += 1;
+        setBulkRows((current) => current.map((currentRow) => currentRow.id === row.id ? {
+          ...currentRow,
+          name: analysis.confidence >= 0.65 && analysis.suggestedName ? analysis.suggestedName : currentRow.name,
+          color: analysis.color || currentRow.color,
+          description: analysis.description || currentRow.description,
+          analysisConfidence: analysis.confidence,
+          error: "",
+        } : currentRow));
+      } catch (error) {
+        setBulkRows((current) => current.map((currentRow) => currentRow.id === row.id ? {
+          ...currentRow,
+          error: error instanceof Error ? error.message : "Impossible d’analyser cette image.",
+        } : currentRow));
+      }
+    }
+
+    setIsAnalyzingBulkImages(false);
+    setMessage(`${successCount} image${successCount > 1 ? "s" : ""} analysée${successCount > 1 ? "s" : ""}, ${rowsToAnalyze.length - successCount} erreur${rowsToAnalyze.length - successCount > 1 ? "s" : ""}.`);
   }
 
   function removeBulkProduct(id: string) {
@@ -466,7 +556,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
   }
 
   async function handleBulkSubmit() {
-    if (bulkSubmittingRef.current) return;
+    if (bulkSubmittingRef.current || isAnalyzingBulkImages) return;
     if (bulkRows.length === 0) {
       setMessage("Sélectionnez au moins une image.");
       return;
@@ -850,8 +940,11 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
               form={newProduct}
               onTextChange={(name, value) => setNewProduct((current) => setTextField(current, name, value))}
               onToggle={(name, value) => setNewProduct((current) => ({ ...current, [name]: value }))}
-              onImageChange={setNewImage}
+              onImageChange={handleNewImageChange}
               onImagesChange={setNewImages}
+              onAnalyzeImage={analyzeNewProductImage}
+              isAnalyzingImage={isAnalyzingNewImage}
+              imageAnalysisMessage={newImageAnalysisMessage}
               onSubmit={createProduct}
               requireMainImage
               isSubmitting={isSaving}
@@ -874,6 +967,14 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
             />
             {bulkRows.length > 0 && (
               <div className="mt-5 space-y-4">
+                <button
+                  type="button"
+                  onClick={analyzeAllBulkImages}
+                  disabled={isAnalyzingBulkImages || isBulkSubmitting}
+                  className="w-full rounded-xl border border-[#c9a227] bg-amber-50 px-4 py-3 font-black text-[#8a6b13] transition hover:bg-amber-100 disabled:cursor-wait disabled:opacity-60"
+                >
+                  {isAnalyzingBulkImages ? `Analyse ${bulkAnalysisProgress} / ${bulkRows.length}…` : "Analyser toutes les images"}
+                </button>
                 {bulkRows.map((row, index) => (
                   <div key={row.id} className="grid gap-4 rounded-2xl border border-[#e5e5e5] p-4 lg:grid-cols-[96px_repeat(4,minmax(0,1fr))] lg:items-end">
                     <ImagePreview src={row.preview} label={`Aperçu du produit ${index + 1}`} />
@@ -883,11 +984,12 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
                     <Field label="Stock"><input type="number" min="0" value={row.stock} onChange={(event) => updateBulkProduct(row.id, { stock: event.target.value })} required className={fieldClassName} /></Field>
                     <Field label="Description"><textarea value={row.description} onChange={(event) => updateBulkProduct(row.id, { description: event.target.value })} rows={2} className={`${fieldClassName} resize-y`} /></Field>
                     <button type="button" onClick={() => removeBulkProduct(row.id)} className="rounded-xl border border-red-200 px-4 py-3 text-sm font-bold text-red-600 hover:bg-red-50 lg:col-start-5">Supprimer cette ligne</button>
+                    {row.analysisConfidence !== null && <p role="status" className="text-sm font-semibold text-[#8a6b13] lg:col-span-5">Suggestion automatique à vérifier — confiance {Math.round(row.analysisConfidence * 100)} %.</p>}
                     {row.error && <p className="text-sm font-bold text-red-600 lg:col-span-5">{row.error}</p>}
                   </div>
                 ))}
                 <p className="text-sm font-bold text-zinc-700">{bulkRows.length} produit(s) à ajouter</p>
-                <button type="button" onClick={handleBulkSubmit} disabled={isBulkSubmitting} className="w-full rounded-xl bg-black py-3.5 font-black text-white transition hover:bg-[#c9a227] disabled:cursor-wait disabled:opacity-60">{isBulkSubmitting ? "Ajout en cours…" : "Ajouter tous les produits"}</button>
+                <button type="button" onClick={handleBulkSubmit} disabled={isBulkSubmitting || isAnalyzingBulkImages} className="w-full rounded-xl bg-black py-3.5 font-black text-white transition hover:bg-[#c9a227] disabled:cursor-wait disabled:opacity-60">{isBulkSubmitting ? "Ajout en cours…" : "Ajouter tous les produits"}</button>
               </div>
             )}
           </section>
@@ -1098,6 +1200,9 @@ function ProductEditor({
   onToggle,
   onImageChange,
   onImagesChange,
+  onAnalyzeImage,
+  isAnalyzingImage = false,
+  imageAnalysisMessage = "",
   onSubmit,
   requireMainImage = false,
   isSubmitting,
@@ -1108,6 +1213,9 @@ function ProductEditor({
   onToggle: (name: "featured" | "newArrival" | "available", value: boolean) => void;
   onImageChange: (file: File | null) => void;
   onImagesChange: (files: File[]) => void;
+  onAnalyzeImage?: () => void;
+  isAnalyzingImage?: boolean;
+  imageAnalysisMessage?: string;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   requireMainImage?: boolean;
   isSubmitting: boolean;
@@ -1160,7 +1268,22 @@ function ProductEditor({
             helper="Cette image est utilisée comme visuel principal de la casquette."
           >
             <input type="file" accept="image/jpeg,image/png,image/webp" required={requireMainImage} onChange={handleMainImage} className={fileInputClassName} />
-            {mainPreview && <ImagePreview src={mainPreview} label="Aperçu de l’image principale" large />}
+            {mainPreview && (
+              <>
+                <ImagePreview src={mainPreview} label="Aperçu de l’image principale" large />
+                {onAnalyzeImage && (
+                  <button
+                    type="button"
+                    onClick={onAnalyzeImage}
+                    disabled={isAnalyzingImage || isSubmitting}
+                    className="w-full rounded-xl border border-[#c9a227] bg-amber-50 px-4 py-3 text-sm font-black text-[#8a6b13] transition hover:bg-amber-100 disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {isAnalyzingImage ? "Analyse en cours…" : "Détecter les informations avec l’IA"}
+                  </button>
+                )}
+                {imageAnalysisMessage && <p role="status" className="text-sm font-semibold text-[#8a6b13]">{imageAnalysisMessage}</p>}
+              </>
+            )}
           </UploadCard>
           <UploadCard
             title="Images supplémentaires"
