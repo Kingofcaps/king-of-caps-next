@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { ADMIN_COOKIE, isAdminToken } from "@/app/lib/admin-auth";
+import { cleanSuggestedProductName } from "@/app/lib/product-analysis";
 
 export const runtime = "nodejs";
 
@@ -83,11 +84,13 @@ function cleanAnalysis(value: unknown): ProductImageAnalysis {
     ? Math.min(1, Math.max(0, result.confidence))
     : 0;
 
+  const color = text("color");
+
   return {
-    suggestedName: text("suggestedName"),
+    suggestedName: cleanSuggestedProductName(text("suggestedName"), color),
     brand: text("brand", "Inconnue") || "Inconnue",
     category: text("category", "Casquette") || "Casquette",
-    color: text("color"),
+    color,
     description: text("description"),
     confidence,
   };
@@ -147,7 +150,7 @@ export async function POST(request: Request) {
       messages: [
         {
           role: "system",
-          content: "Tu analyses des photos de casquettes pour préparer une fiche produit en français. Réponds uniquement selon le schéma JSON demandé. N’affirme jamais qu’un article est authentique. N’invente jamais une marque ou une équipe : si le logo ou le texte n’est pas clairement lisible, utilise exactement « Inconnue ». Le nom doit être court, commercial et factuel, par exemple « LA Flames Ajustable », « NY Yankees Fitted noire », « Bulls 1966 blanc-bleu » ou « Oakland brodée noire ». N’utilise pas le nom du fichier. Si plusieurs casquettes sont visibles, décris l’ensemble et réduis la confiance. La description doit rester concise et ne contenir aucune affirmation non visible.",
+          content: "Tu analyses des photos de casquettes pour préparer une fiche produit en français. Réponds uniquement selon le schéma JSON demandé. N’affirme jamais qu’un article est authentique. N’invente jamais une marque ou une équipe : si le logo ou le texte n’est pas clairement lisible, utilise exactement « Inconnue » pour la marque. Le suggestedName doit rester vide si aucun vrai nom n’est identifiable. Le nom doit être court, commercial et factuel, et contenir seulement l’équipe ou la ville visible, un logo ou motif distinctif, la coupe ou le type identifiable, et une caractéristique commerciale utile comme ajustable, fitted, trucker ou snapback. Exemples : « LA Flames ajustable », « NY Yankees fitted », « Bulls 1966 snapback » ou « Oakland brodée ». Do not include any color words in suggestedName. Put all colors only in the color field. Une couleur ne peut exceptionnellement rester dans suggestedName que si elle fait clairement partie du nom officiel visible sur le produit. N’utilise pas le nom du fichier. Si plusieurs casquettes sont visibles, décris l’ensemble et réduis la confiance. La description doit rester concise et ne contenir aucune affirmation non visible.",
         },
         {
           role: "user",
