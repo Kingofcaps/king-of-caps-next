@@ -494,10 +494,10 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
       const analysis = await analyzeProductImage(newImage);
       setNewProduct((current) => ({
         ...current,
-        name: analysis.suggestedName,
-        brand: analysis.confidence >= 0.65 && analysis.brand ? analysis.brand : current.brand,
+        name: analysis.suggestedName || current.name,
+        brand: analysis.brand?.trim() ? analysis.brand.trim() : current.brand,
         category: analysis.category || current.category,
-        color: analysis.color,
+        color: analysis.color || current.color,
         description: analysis.description || current.description,
       }));
       const confidence = Math.round(analysis.confidence * 100);
@@ -528,8 +528,8 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
         successCount += 1;
         setBulkRows((current) => current.map((currentRow) => currentRow.id === row.id ? {
           ...currentRow,
-          name: analysis.suggestedName,
-          color: analysis.color,
+          name: analysis.suggestedName || currentRow.name,
+          color: analysis.color || currentRow.color,
           description: analysis.description || currentRow.description,
           analysisConfidence: analysis.confidence,
           error: "",

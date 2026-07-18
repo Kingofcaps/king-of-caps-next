@@ -1,140 +1,79 @@
-const COLOR_WORDS: Record<string, string> = {
-  noir: "noir",
-  noire: "noir",
-  noirs: "noir",
-  noires: "noir",
-  blanc: "blanc",
-  blanche: "blanc",
-  blancs: "blanc",
-  blanches: "blanc",
-  rouge: "rouge",
-  rouges: "rouge",
-  bleu: "bleu",
-  bleue: "bleu",
-  bleus: "bleu",
-  bleues: "bleu",
-  vert: "vert",
-  verte: "vert",
-  verts: "vert",
-  vertes: "vert",
-  jaune: "jaune",
-  jaunes: "jaune",
-  orange: "orange",
-  oranges: "orange",
-  rose: "rose",
-  roses: "rose",
-  violet: "violet",
-  violette: "violet",
-  violets: "violet",
-  violettes: "violet",
-  gris: "gris",
-  grise: "gris",
-  grises: "gris",
-  marron: "marron",
-  marrons: "marron",
-  beige: "beige",
-  beiges: "beige",
-  kaki: "kaki",
-  kakis: "kaki",
-  creme: "creme",
-  dore: "dore",
-  doree: "dore",
-  dores: "dore",
-  dorees: "dore",
-  argente: "argente",
-  argentee: "argente",
-  argentes: "argente",
-  argentees: "argente",
-  bordeaux: "bordeaux",
-  turquoise: "turquoise",
-  turquoises: "turquoise",
-  multicolore: "multicolore",
-  multicolores: "multicolore",
-};
+const COLOR_VARIANTS = {
+  rouge: ["rouge", "rouges"],
+  noir: ["noir", "noire", "noirs", "noires"],
+  blanc: ["blanc", "blanche", "blancs", "blanches"],
+  bleu: ["bleu", "bleue", "bleus", "bleues"],
+  vert: ["vert", "verte", "verts", "vertes"],
+  jaune: ["jaune", "jaunes"],
+  gris: ["gris", "grise", "grises"],
+  beige: ["beige", "beiges"],
+  marron: ["marron", "marrons"],
+  rose: ["rose", "roses"],
+  violet: ["violet", "violette", "violets", "violettes"],
+  orange: ["orange", "oranges"],
+  bordeaux: ["bordeaux"],
+} as const;
 
-const COLOR_CONNECTORS = new Set(["et", "ou", "avec", "and"]);
-const GENERIC_PRODUCT_WORDS = new Set(["casquette", "cap"]);
+const COLOR_CANONICAL_BY_VARIANT = new Map<string, keyof typeof COLOR_VARIANTS>(
+  Object.entries(COLOR_VARIANTS).flatMap(([canonical, variants]) => (
+    variants.map((variant) => [variant, canonical as keyof typeof COLOR_VARIANTS])
+  )),
+);
 
-type WordPart = {
-  canonicalColor?: string;
-  end: number;
-  normalized: string;
-  start: number;
-};
+const UNKNOWN_BRANDS = new Set([
+  "inconnue",
+  "inconnu",
+  "unknown",
+  "non identifiee",
+  "non identifie",
+  "n a",
+  "na",
+]);
 
-function normalizeWord(word: string) {
-  return word.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr");
+function normalize(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr");
 }
 
-function wordsIn(value: string): WordPart[] {
-  return [...value.matchAll(/[\p{L}]+/gu)].map((match) => {
-    const normalized = normalizeWord(match[0]);
-    const start = match.index;
-    return {
-      canonicalColor: COLOR_WORDS[normalized],
-      end: start + match[0].length,
-      normalized,
-      start,
-    };
-  });
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function colorSet(value: string) {
-  return new Set(wordsIn(value).flatMap((word) => word.canonicalColor ? [word.canonicalColor] : []));
-}
-
-function sameColors(left: Set<string>, right: Set<string>) {
-  return left.size === right.size && [...left].every((color) => right.has(color));
-}
-
-function tidyName(value: string) {
+function cleanRemainingSeparators(value: string) {
   return value
+    .replace(/\s+/g, " ")
     .replace(/\s+([,;/])/g, "$1")
-    .replace(/([,;/]){2,}/g, "$1")
+    .replace(/(?:\s*[,;/\-–—]\s*){2,}/g, " ")
     .replace(/^[\s,;:/\-–—]+|[\s,;:/\-–—]+$/g, "")
-    .replace(/\s{2,}/g, " ")
     .trim();
 }
 
-export function cleanSuggestedProductName(suggestedName: string, color: string) {
-  const name = suggestedName.trim();
-  if (!name) return "";
+export function removeDetectedColorsFromName(suggestedName: string, detectedColor: string) {
+  const detectedColors = new Set<keyof typeof COLOR_VARIANTS>();
 
-  const nameWords = wordsIn(name);
-  const expectedColors = colorSet(color);
-  const nonColorWords = nameWords.filter((word) => !word.canonicalColor && !COLOR_CONNECTORS.has(word.normalized));
-
-  if (nonColorWords.length === 0 && nameWords.some((word) => word.canonicalColor)) return "";
-  if (color.trim() && normalizeWord(name) === normalizeWord(color.trim())) return "";
-  if (expectedColors.size === 0) return name;
-
-  const colorRuns: Array<{ colors: Set<string>; endWord: number; startWord: number }> = [];
-  let runStart: number | null = null;
-  for (let index = 0; index <= nameWords.length; index += 1) {
-    const word = nameWords[index];
-    const belongsToColorRun = word && (word.canonicalColor || COLOR_CONNECTORS.has(word.normalized));
-    if (belongsToColorRun && runStart === null) runStart = index;
-    if ((!belongsToColorRun || index === nameWords.length) && runStart !== null) {
-      const endWord = index - 1;
-      const colors = new Set(
-        nameWords.slice(runStart, endWord + 1).flatMap((part) => part.canonicalColor ? [part.canonicalColor] : []),
-      );
-      if (colors.size > 0) colorRuns.push({ colors, endWord, startWord: runStart });
-      runStart = null;
-    }
+  for (const word of normalize(detectedColor).match(/[\p{L}]+/gu) ?? []) {
+    const canonical = COLOR_CANONICAL_BY_VARIANT.get(word);
+    if (canonical) detectedColors.add(canonical);
   }
 
-  const removableRun = colorRuns.find((run) => {
-    if (!sameColors(run.colors, expectedColors)) return false;
-    const isAtEdge = run.startWord === 0 || run.endWord === nameWords.length - 1;
-    const followsGenericProduct = run.startWord > 0
-      && GENERIC_PRODUCT_WORDS.has(nameWords[run.startWord - 1].normalized);
-    return isAtEdge || followsGenericProduct || run.colors.size > 1;
-  });
+  if (detectedColors.size === 0) return suggestedName.trim();
 
-  if (!removableRun) return name;
+  const detectedVariants = [...detectedColors]
+    .flatMap((color) => COLOR_VARIANTS[color])
+    .sort((left, right) => right.length - left.length)
+    .map(escapeRegExp)
+    .join("|");
+  const colorWord = `(?:${detectedVariants})`;
+  const separator = String.raw`(?:\s*(?:,|\/|[-–—]|et)\s*)`;
+  const detectedColorSequence = new RegExp(
+    String.raw`(?<!\p{L})${colorWord}(?:${separator}${colorWord})*(?!\p{L})`,
+    "giu",
+  );
 
-  const start = nameWords[removableRun.startWord].start;
-  const end = nameWords[removableRun.endWord].end;
-  return tidyName(`${name.slice(0, start)} ${name.slice(end)}`);
+  return cleanRemainingSeparators(suggestedName.replace(detectedColorSequence, " "));
+}
+
+export function cleanAnalyzedBrand(brand: string) {
+  const trimmedBrand = brand.trim();
+  const normalizedBrand = normalize(trimmedBrand).replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  return UNKNOWN_BRANDS.has(normalizedBrand) ? "" : trimmedBrand;
 }
