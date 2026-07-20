@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent } from "react";
+import { selectFeaturedProducts } from "@/app/lib/featured-products";
 import type { Product } from "@/app/lib/products";
 import styles from "./TrendingProducts.module.css";
 
@@ -44,11 +45,7 @@ export default function TrendingProducts({ products }: { products: Product[] }) 
   const interactionTimeoutRef = useRef<number | null>(null);
   const [isInteracting, setIsInteracting] = useState(false);
 
-  const trendingProducts = useMemo(() => {
-    const available = products.filter((product) => product.inStock);
-    const unavailable = products.filter((product) => !product.inStock);
-    return [...available, ...unavailable].slice(0, 8);
-  }, [products]);
+  const trendingProducts = useMemo(() => selectFeaturedProducts(products), [products]);
 
   useEffect(() => () => {
     if (interactionTimeoutRef.current !== null) {
