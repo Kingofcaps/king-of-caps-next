@@ -1,7 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import { useMemo, useRef, useState, type TouchEvent } from "react";
+import ProductImage from "@/app/components/ProductImage";
+import { normalizeProductImageUrl } from "@/app/lib/product-image-url";
 
 export default function ProductImageGallery({
   productName,
@@ -12,18 +13,19 @@ export default function ProductImageGallery({
   mainImage: string;
   additionalImages: string[];
 }) {
+  const normalizedMainImage = normalizeProductImageUrl(mainImage);
   const thumbnailImages = useMemo(
-    () => Array.from(new Set(additionalImages))
-      .filter((image) => image.trim() !== "" && image !== mainImage),
-    [additionalImages, mainImage],
+    () => Array.from(new Set(additionalImages.map(normalizeProductImageUrl)))
+      .filter((image) => image !== normalizedMainImage),
+    [additionalImages, normalizedMainImage],
   );
   const galleryImages = useMemo(
-    () => [mainImage, ...thumbnailImages],
-    [mainImage, thumbnailImages],
+    () => [normalizedMainImage, ...thumbnailImages],
+    [normalizedMainImage, thumbnailImages],
   );
   const [activeIndex, setActiveIndex] = useState(0);
   const touchStartXRef = useRef<number | null>(null);
-  const activeImage = galleryImages[activeIndex] ?? mainImage;
+  const activeImage = galleryImages[activeIndex] ?? normalizedMainImage;
 
   function showPreviousImage() {
     setActiveIndex((current) => Math.max(current - 1, 0));
@@ -56,7 +58,7 @@ export default function ProductImageGallery({
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
-        <Image
+        <ProductImage
           key={activeImage}
           src={activeImage}
           alt={`${productName} — photo ${activeIndex + 1}`}
@@ -105,7 +107,7 @@ export default function ProductImageGallery({
               aria-current={index + 1 === activeIndex ? "true" : undefined}
               className={`relative aspect-square w-[calc((100%-1.5rem)/4)] min-w-[72px] max-w-24 shrink-0 overflow-hidden rounded-xl border-2 bg-zinc-100 transition ${index + 1 === activeIndex ? "border-[#c9a227]" : "border-transparent hover:border-zinc-300"}`}
             >
-              <Image src={image} alt="" fill sizes="96px" className="object-cover" />
+              <ProductImage src={image} alt="" fill sizes="96px" className="object-cover" />
             </button>
           ))}
         </div>

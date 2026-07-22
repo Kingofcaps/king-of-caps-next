@@ -39,6 +39,17 @@ function getNotificationConfig() {
   return { apiKey, notificationEmail, from };
 }
 
+function orderItemLines(order: Order) {
+  if (!order.order_items?.length) {
+    return [`${order.product_name} × ${order.quantity} — ${formatDualPrice(order.total_amount)}`];
+  }
+  return order.order_items.map((item) => `${item.product_name} × ${item.quantity} — ${formatDualPrice(item.line_total)}`);
+}
+
+function orderItemsHtml(order: Order) {
+  return orderItemLines(order).map((line) => `<li>${escapeHtml(line)}</li>`).join("");
+}
+
 export async function notifyNewOrder(order: Order) {
   const { apiKey, notificationEmail, from } = getNotificationConfig();
   const customerName = `${order.customer_first_name} ${order.customer_last_name}`;
@@ -52,12 +63,12 @@ export async function notifyNewOrder(order: Order) {
         `Commande : ${order.order_number}`,
         `Client : ${customerName}`,
         `Téléphone : ${order.customer_phone}`,
-        `Produit : ${order.product_name}`,
-        `Quantité : ${order.quantity}`,
+        "Articles :",
+        ...orderItemLines(order).map((line) => `- ${line}`),
         `Total : ${formatDualPrice(order.total_amount)}`,
         `Paiement : ${order.payment_method}`,
       ].join("\n"),
-      html: `<h1>Nouvelle commande ${escapeHtml(order.order_number)}</h1><p><strong>Client :</strong> ${escapeHtml(customerName)}</p><p><strong>Téléphone :</strong> ${escapeHtml(order.customer_phone)}</p><p><strong>Produit :</strong> ${escapeHtml(order.product_name)}</p><p><strong>Quantité :</strong> ${order.quantity}</p><p><strong>Total :</strong> ${escapeHtml(formatDualPrice(order.total_amount))}</p><p><strong>Paiement :</strong> ${escapeHtml(order.payment_method)}</p>`,
+      html: `<h1>Nouvelle commande ${escapeHtml(order.order_number)}</h1><p><strong>Client :</strong> ${escapeHtml(customerName)}</p><p><strong>Téléphone :</strong> ${escapeHtml(order.customer_phone)}</p><p><strong>Articles :</strong></p><ul>${orderItemsHtml(order)}</ul><p><strong>Total :</strong> ${escapeHtml(formatDualPrice(order.total_amount))}</p><p><strong>Paiement :</strong> ${escapeHtml(order.payment_method)}</p>`,
     },
     { idempotencyKey: `admin-order-${order.id}` },
   );
@@ -84,9 +95,8 @@ function customerEmailText(order: Order) {
     "",
     "Merci pour votre commande chez KING OF CAPS.",
     `Numéro de commande : ${order.order_number}`,
-    `Produit : ${order.product_name}`,
-    `Quantité : ${order.quantity}`,
-    `Prix unitaire : ${formatDualPrice(order.unit_price)}`,
+    "Articles :",
+    ...orderItemLines(order).map((line) => `- ${line}`),
     `Total : ${formatDualPrice(order.total_amount)}`,
     `Mode de paiement : ${paymentMethodLabel(order.payment_method)}`,
     `Statut du paiement : ${paymentStatusLabel(order.payment_status)}`,
@@ -105,9 +115,6 @@ function customerEmailText(order: Order) {
 function customerEmailHtml(order: Order) {
   const customerName = escapeHtml(order.customer_first_name.trim() || order.customer_last_name.trim());
   const orderNumber = escapeHtml(order.order_number);
-  const productName = escapeHtml(order.product_name);
-  const quantity = escapeHtml(String(order.quantity));
-  const unitPrice = escapeHtml(formatDualPrice(order.unit_price));
   const total = escapeHtml(formatDualPrice(order.total_amount));
   const paymentMethod = escapeHtml(paymentMethodLabel(order.payment_method));
   const paymentStatus = escapeHtml(paymentStatusLabel(order.payment_status));
@@ -153,9 +160,7 @@ function customerEmailHtml(order: Order) {
             </td></tr>
             <tr><td class="email-padding" style="padding:8px 38px 20px;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
-                ${emailDetailRow("Produit", productName)}
-                ${emailDetailRow("Quantité", quantity)}
-                ${emailDetailRow("Prix unitaire", unitPrice)}
+                ${emailDetailRow("Articles", `<ul style="margin:0;padding-left:18px;">${orderItemsHtml(order)}</ul>`)}
                 ${emailDetailRow("Total", total, true)}
                 ${emailDetailRow("Mode de paiement", paymentMethod)}
                 ${emailDetailRow("Statut du paiement", paymentStatus)}

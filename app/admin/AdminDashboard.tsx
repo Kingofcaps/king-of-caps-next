@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
@@ -8,6 +7,7 @@ import type { Order, OrderStatus } from "@/app/lib/orders";
 import { formatDualPrice, formatFcfaPrice, parsePrice } from "@/app/lib/prices";
 import type { Product } from "@/app/lib/products";
 import CampaignLinkGenerator from "./CampaignLinkGenerator";
+import ProductImage from "@/app/components/ProductImage";
 import { exportOrdersPdf, exportOrdersXlsx, filterOrdersForExport, totalExportRevenue, type ExportDateFilter } from "./orderExports";
 
 type ProductForm = Omit<Product, "id" | "image" | "images" | "inStock" | "sortOrder" | "createdAt">;
@@ -920,7 +920,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
           <section className="grid gap-5 xl:grid-cols-3">
             <DashboardChart title="Revenus — 30 derniers jours" values={dashboard.days.map((day) => day.revenue)} labels={dashboard.days.map((day) => day.label)} valueFormatter={formatDualPrice} />
             <DashboardChart title="Commandes — 30 derniers jours" values={dashboard.days.map((day) => day.orders)} labels={dashboard.days.map((day) => day.label)} valueFormatter={(value) => `${value} commande${value > 1 ? "s" : ""}`} />
-            <section className="rounded-2xl border border-[#e5e5e5] bg-white p-5 shadow-sm"><h3 className="font-black">Produits les plus vendus</h3><div className="mt-5 space-y-3">{dashboard.bestSelling.length > 0 ? dashboard.bestSelling.map((product, index) => <div key={`${product.name}-${index}`} className="flex items-center gap-3 rounded-xl bg-[#fafafa] p-3"><div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-zinc-100"><Image src={product.image} alt="" fill sizes="40px" className="object-cover" /></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-zinc-800">{index + 1}. {product.name}</p><p className="mt-0.5 text-xs font-semibold text-zinc-500">{product.quantity} vendue{product.quantity > 1 ? "s" : ""}</p></div><span className="shrink-0 text-sm font-black text-[#c9a227]">{formatDualPrice(product.revenue)}</span></div>) : <p className="text-sm text-zinc-500">Aucune vente enregistrée.</p>}</div><div className="mt-5 border-t border-[#e5e5e5] pt-4"><p className="text-sm font-bold text-zinc-800">Produits les plus vus</p><p className="mt-1 text-sm text-zinc-500">Données de vues indisponibles.</p></div></section>
+            <section className="rounded-2xl border border-[#e5e5e5] bg-white p-5 shadow-sm"><h3 className="font-black">Produits les plus vendus</h3><div className="mt-5 space-y-3">{dashboard.bestSelling.length > 0 ? dashboard.bestSelling.map((product, index) => <div key={`${product.name}-${index}`} className="flex items-center gap-3 rounded-xl bg-[#fafafa] p-3"><div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-zinc-100"><ProductImage src={product.image} alt="" fill sizes="40px" className="object-cover" /></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-zinc-800">{index + 1}. {product.name}</p><p className="mt-0.5 text-xs font-semibold text-zinc-500">{product.quantity} vendue{product.quantity > 1 ? "s" : ""}</p></div><span className="shrink-0 text-sm font-black text-[#c9a227]">{formatDualPrice(product.revenue)}</span></div>) : <p className="text-sm text-zinc-500">Aucune vente enregistrée.</p>}</div><div className="mt-5 border-t border-[#e5e5e5] pt-4"><p className="text-sm font-bold text-zinc-800">Produits les plus vus</p><p className="mt-1 text-sm text-zinc-500">Données de vues indisponibles.</p></div></section>
           </section>
 
           <section className="grid gap-5 lg:grid-cols-2">
@@ -1025,7 +1025,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
               {filteredProducts.map((product) => (
                 <article key={product.id} className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition ${selectedProductIds.has(product.id) ? "border-[#c9a227] ring-2 ring-[#c9a227]/25" : "border-[#e5e5e5]"}`}>
                   <div className="relative aspect-square w-full overflow-hidden rounded-t-2xl">
-                    <Image src={product.image} alt={product.name} fill sizes="(max-width: 768px) 50vw, (max-width: 1200px) 25vw, 20vw" className="object-cover" />
+                    <ProductImage src={product.image} alt={product.name} fill sizes="(max-width: 768px) 50vw, (max-width: 1200px) 25vw, 20vw" className="object-cover" />
                     <label className="absolute left-3 top-3 flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-xl border border-black/10 bg-white/95 shadow-md backdrop-blur" onClick={(event) => event.stopPropagation()}>
                       <span className="sr-only">Sélectionner {product.name}</span>
                       <input
@@ -1148,7 +1148,7 @@ function OrderCard({ order, isUpdating, isExpanded, onStatusChange, onToggleDeta
   return (
     <article className="rounded-2xl border border-[#e5e5e5] bg-[#fafafa] p-4">
       <div className="grid gap-4 lg:grid-cols-[auto_1fr_auto]">
-        <div className="relative h-[72px] w-[72px] overflow-hidden rounded-xl bg-zinc-100"><Image src={order.product_image} alt={order.product_name} fill sizes="72px" className="object-cover" /></div>
+        <div className="relative h-[72px] w-[72px] overflow-hidden rounded-xl bg-zinc-100"><ProductImage src={order.product_image} alt={order.product_name} fill sizes="72px" className="object-cover" /></div>
         <div>
           <p className="text-xs font-bold tracking-wide text-[#c9a227]">{order.order_number}</p>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1"><h3 className="font-black">{order.product_name}</h3><span className="text-sm font-bold text-[#c9a227]">{formatDualPrice(order.total_amount)}</span></div>
@@ -1191,7 +1191,7 @@ function DashboardChart({ title, values, labels, valueFormatter }: { title: stri
 
 function StockAlert({ title, description, products, tone }: { title: string; description: string; products: Product[]; tone: "amber" | "red" }) {
   const toneClassName = tone === "amber" ? "border-amber-200 bg-amber-50 text-amber-800" : "border-red-200 bg-red-50 text-red-800";
-  return <section className={`rounded-2xl border p-5 shadow-sm ${toneClassName}`}><h3 className="font-black">{title}</h3><p className="mt-1 text-sm opacity-80">{description}</p><div className="mt-4 space-y-2">{products.length > 0 ? products.map((product) => <div key={product.id} className="flex items-center gap-3 rounded-xl bg-white/75 p-3"><div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-white"><Image src={product.image} alt="" fill sizes="40px" className="object-cover" /></div><span className="min-w-0 flex-1 truncate text-sm font-bold">{product.name}</span><span className="shrink-0 text-sm font-black">{product.stockQuantity} unité{product.stockQuantity > 1 ? "s" : ""}</span><Link href="/admin/products" className="shrink-0 rounded-lg border border-current/20 bg-white px-2.5 py-1.5 text-xs font-bold">Gérer</Link></div>) : <p className="rounded-xl bg-white/75 px-3 py-4 text-sm">Aucun produit concerné.</p>}</div></section>;
+  return <section className={`rounded-2xl border p-5 shadow-sm ${toneClassName}`}><h3 className="font-black">{title}</h3><p className="mt-1 text-sm opacity-80">{description}</p><div className="mt-4 space-y-2">{products.length > 0 ? products.map((product) => <div key={product.id} className="flex items-center gap-3 rounded-xl bg-white/75 p-3"><div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-white"><ProductImage src={product.image} alt="" fill sizes="40px" className="object-cover" /></div><span className="min-w-0 flex-1 truncate text-sm font-bold">{product.name}</span><span className="shrink-0 text-sm font-black">{product.stockQuantity} unité{product.stockQuantity > 1 ? "s" : ""}</span><Link href="/admin/products" className="shrink-0 rounded-lg border border-current/20 bg-white px-2.5 py-1.5 text-xs font-bold">Gérer</Link></div>) : <p className="rounded-xl bg-white/75 px-3 py-4 text-sm">Aucun produit concerné.</p>}</div></section>;
 }
 
 function ProductEditor({

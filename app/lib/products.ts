@@ -1,4 +1,5 @@
 import { formatFcfaPrice } from "@/app/lib/prices";
+import { normalizeProductImageUrl, PRODUCT_IMAGE_FALLBACK } from "@/app/lib/product-image-url";
 
 export type Product = {
   id: string;
@@ -24,7 +25,10 @@ type ProductRecord = {
   name: string;
   price: string;
   description: string;
-  image: string;
+  image: unknown;
+  image_url?: unknown;
+  main_image?: unknown;
+  product_image?: unknown;
   images: unknown;
   brand: string;
   category: string;
@@ -74,26 +78,33 @@ async function supabaseProductsRequest(path: string, init: RequestInit = {}) {
   return response;
 }
 
-function normalizeImages(value: unknown, primaryImage: string) {
+function normalizeImages(value: unknown, primaryImage: unknown) {
   const additionalImages = Array.isArray(value)
-    ? value.filter((image): image is string =>
-        typeof image === "string" && (image.startsWith("/") || /^https:\/\//i.test(image)),
-      )
+    ? value.filter((image): image is string => typeof image === "string")
+      .map(normalizeProductImageUrl)
+      .filter((image) => image !== PRODUCT_IMAGE_FALLBACK)
     : [];
-  return Array.from(new Set([primaryImage, ...additionalImages])).slice(0, 6);
+  return Array.from(new Set([normalizeProductImageUrl(primaryImage), ...additionalImages])).slice(0, 6);
 }
 
 function toProduct(record: ProductRecord): Product {
   const stockQuantity = Math.max(0, Math.floor(Number(record.stock_quantity) || 0));
   const available = record.available !== false && stockQuantity > 0;
+  const rawImage = [record.image, record.image_url, record.main_image, record.product_image, record.images];
+  const normalizedImage = normalizeProductImageUrl(rawImage);
+
+  if (process.env.NODE_ENV === "development") {
+    console.log("IMAGE PRODUIT BRUTE:", rawImage);
+    console.log("IMAGE PRODUIT NORMALISÉE:", normalizedImage);
+  }
 
   return {
     id: record.id,
     name: record.name,
     price: formatFcfaPrice(record.price),
     description: record.description,
-    image: record.image,
-    images: normalizeImages(record.images, record.image),
+    image: normalizedImage,
+    images: normalizeImages(record.images, normalizedImage),
     brand: record.brand,
     category: record.category,
     color: record.color,

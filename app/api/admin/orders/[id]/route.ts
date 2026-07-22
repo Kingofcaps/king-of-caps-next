@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { ADMIN_COOKIE, isAdminToken } from "@/app/lib/admin-auth";
-import { deleteOrder, getOrder, updateOrderUnlessCancelled, type OrderStatus } from "@/app/lib/orders";
+import { deleteOrder, getOrder, releaseOrderStock, updateOrderUnlessCancelled, type OrderStatus } from "@/app/lib/orders";
 import { restoreProductStock } from "@/app/lib/products";
 import { recordStockMovementSafely } from "@/app/lib/stock-movements";
 
@@ -36,18 +36,22 @@ export async function PATCH(request: Request, context: RouteContext<"/api/admin/
       return NextResponse.json({ error: "La commande a été modifiée entre-temps. Réessayez." }, { status: 409 });
     }
 
-    const stockWasReserved = updatedOrder.stock_reserved_at !== null || updatedOrder.payment_method === "cash_on_delivery";
+    const stockWasReserved = currentOrder.stock_reserved_at !== null || currentOrder.payment_method === "cash_on_delivery";
     if (requestedStatus === "cancelled" && stockWasReserved) {
-      const restoredProduct = await restoreProductStock(updatedOrder.product_id, updatedOrder.quantity);
-      await recordStockMovementSafely({
-        productId: restoredProduct.id,
-        productName: restoredProduct.name,
-        movementType: "order_cancellation",
-        quantityChange: updatedOrder.quantity,
-        previousQuantity: restoredProduct.stockQuantity - updatedOrder.quantity,
-        newQuantity: restoredProduct.stockQuantity,
-        note: `Annulation de la commande ${updatedOrder.order_number}`,
-      });
+      if (currentOrder.stock_reserved_at !== null) {
+        await releaseOrderStock(updatedOrder.id);
+      } else {
+        const restoredProduct = await restoreProductStock(updatedOrder.product_id, updatedOrder.quantity);
+        await recordStockMovementSafely({
+          productId: restoredProduct.id,
+          productName: restoredProduct.name,
+          movementType: "order_cancellation",
+          quantityChange: updatedOrder.quantity,
+          previousQuantity: restoredProduct.stockQuantity - updatedOrder.quantity,
+          newQuantity: restoredProduct.stockQuantity,
+          note: `Annulation de la commande ${updatedOrder.order_number}`,
+        });
+      }
     }
 
     return NextResponse.json(updatedOrder);

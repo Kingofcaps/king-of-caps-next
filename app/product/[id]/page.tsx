@@ -6,6 +6,8 @@ import { formatDualPrice, parsePrice } from "../../lib/prices";
 import { getProduct } from "../../lib/products";
 import { absoluteUrl, seoDescription, serializeJsonLd, SITE_NAME, SITE_URL } from "../../lib/seo";
 import ProductImageGallery from "./ProductImageGallery";
+import ProductPurchaseActions from "./ProductPurchaseActions";
+import CartLink from "../../components/CartLink";
 
 const WHATSAPP_URL = "https://wa.me/22950687515";
 const getProductForPage = cache(getProduct);
@@ -108,14 +110,7 @@ export default async function ProductPage({
           <Link href="/" className="text-sm font-bold tracking-[0.22em] text-black">
             KING OF CAPS
           </Link>
-          <a
-            href={WHATSAPP_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#c9a227]"
-          >
-            WhatsApp
-          </a>
+          <div className="flex items-center gap-2"><CartLink /><a href={WHATSAPP_URL} target="_blank" rel="noreferrer" className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#c9a227]">WhatsApp</a></div>
         </div>
       </header>
 
@@ -158,8 +153,8 @@ export default async function ProductPage({
             <p className="mt-2">Commande simple et sécurisée directement sur WhatsApp.</p>
           </div>
 
-          <div className="mt-10 grid gap-3 sm:flex">
-            {product.inStock ? <Link href={`/checkout/${product.id}`} className="inline-flex w-full items-center justify-center rounded-xl bg-black px-6 py-4 text-base font-black text-white shadow-lg shadow-black/10 transition hover:bg-[#c9a227] sm:w-auto">Commander en ligne</Link> : <span aria-disabled="true" className="inline-flex w-full cursor-not-allowed items-center justify-center rounded-xl bg-zinc-200 px-6 py-4 text-base font-black text-zinc-500 sm:w-auto">Rupture de stock</span>}
+          {product.inStock ? <ProductPurchaseActions product={{ productId: product.id, name: product.name, image: product.image, unitPrice: parsePrice(product.price), stockQuantity: product.stockQuantity }} /> : <span aria-disabled="true" className="mt-10 inline-flex w-full cursor-not-allowed items-center justify-center rounded-xl bg-zinc-200 px-6 py-4 text-base font-black text-zinc-500 sm:w-auto">Rupture de stock</span>}
+          <div className="mt-3 grid gap-3 sm:flex">
             <a
               href={orderUrl}
               target="_blank"

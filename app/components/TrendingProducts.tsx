@@ -1,11 +1,11 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 import { selectFeaturedProducts } from "@/app/lib/featured-products";
 import type { Product } from "@/app/lib/products";
 import styles from "./TrendingProducts.module.css";
+import ProductImage from "./ProductImage";
 
 function TrendingCard({ product, duplicate = false }: { product: Product; duplicate?: boolean }) {
   return (
@@ -16,7 +16,7 @@ function TrendingCard({ product, duplicate = false }: { product: Product; duplic
       aria-label={`Voir ${product.name}`}
     >
       <div className="relative aspect-square overflow-hidden bg-zinc-100">
-        <Image
+        <ProductImage
           src={product.image}
           alt={product.name}
           fill

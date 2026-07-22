@@ -1,7 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import { useMemo, useState } from "react";
+import ProductImage from "@/app/components/ProductImage";
 import type { Product } from "@/app/lib/products";
 import type { StockMovement, StockMovementType } from "@/app/lib/stock-movements";
 
@@ -111,7 +111,7 @@ export default function StockHistory({
             <tbody>
               {filteredMovements.map((movement) => (
                 <tr key={movement.id} className="border-b border-[#f0f0f0] last:border-0">
-                  <td className="px-4 py-3"><div className="flex items-center gap-3"><div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-zinc-100"><Image src={productImages.get(movement.product_id) ?? "/images/logo.png"} alt="" fill sizes="44px" className="object-cover" /></div><div><p className="font-bold text-zinc-800">{movement.product_name}</p>{movement.note && <p className="mt-0.5 text-xs text-zinc-500">{movement.note}</p>}</div></div></td>
+                  <td className="px-4 py-3"><div className="flex items-center gap-3"><div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-zinc-100"><ProductImage src={productImages.get(movement.product_id)} alt="" fill sizes="44px" className="object-cover" /></div><div><p className="font-bold text-zinc-800">{movement.product_name}</p>{movement.note && <p className="mt-0.5 text-xs text-zinc-500">{movement.note}</p>}</div></div></td>
                   <td className="px-4 py-3 font-semibold text-zinc-700">{movementLabels[movement.movement_type]}</td>
                   <td className={`px-4 py-3 font-black ${movement.quantity_change > 0 ? "text-green-700" : movement.quantity_change < 0 ? "text-red-700" : "text-zinc-600"}`}>{movement.quantity_change > 0 ? "+" : ""}{movement.quantity_change}</td>
                   <td className="px-4 py-3 font-semibold text-zinc-600">{movement.previous_quantity}</td>

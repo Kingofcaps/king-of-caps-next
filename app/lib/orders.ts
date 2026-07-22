@@ -2,6 +2,18 @@ export type PaymentMethod = "cash_on_delivery" | "mobile_money" | "card";
 export type PaymentStatus = "pending" | "paid" | "failed";
 export type OrderStatus = "new" | "pending" | "awaiting_payment" | "confirmed" | "preparing" | "delivered" | "cancelled";
 
+export type OrderItem = {
+  id: string;
+  order_id: string;
+  product_id: string;
+  product_name: string;
+  product_image: string;
+  unit_price: number;
+  quantity: number;
+  line_total: number;
+  created_at: string;
+};
+
 export type Order = {
   id: string;
   order_number: string;
@@ -21,13 +33,18 @@ export type Order = {
   payment_method: PaymentMethod;
   payment_status: PaymentStatus;
   order_status: OrderStatus;
-  fedapay_transaction_id: string | null;
+  paydunya_token: string | null;
+  checkout_id: string | null;
+  subtotal_amount: number;
+  delivery_fee: number;
   stock_reserved_at: string | null;
   notifications_sent_at: string | null;
   created_at: string;
+  order_items: OrderItem[];
 };
 
-type NewOrder = Omit<Order, "id" | "created_at">;
+type NewOrder = Omit<Order, "id" | "created_at" | "order_items">;
+type NewOrderItem = Omit<OrderItem, "id" | "order_id" | "created_at">;
 
 function getSupabaseConfig() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -106,19 +123,39 @@ export async function createOrder(order: NewOrder) {
   return createdOrder;
 }
 
+export async function createOrderWithItems(order: NewOrder, items: NewOrderItem[]) {
+  const response = await supabaseRequest("rpc/create_order_with_items", {
+    method: "POST",
+    body: JSON.stringify({ p_order: order, p_items: items }),
+  });
+  return (await response.json()) as { created: boolean; order: Order };
+}
+
 export async function listOrders() {
-  const response = await supabaseRequest("orders?select=*&order=created_at.desc");
+  const response = await supabaseRequest("orders?select=*,order_items(*)&order=created_at.desc");
   return (await response.json()) as Order[];
 }
 
 export async function getOrderByNumber(orderNumber: string) {
-  const response = await supabaseRequest(`orders?order_number=eq.${encodeURIComponent(orderNumber)}&select=*&limit=1`);
+  const response = await supabaseRequest(`orders?order_number=eq.${encodeURIComponent(orderNumber)}&select=*,order_items(*)&limit=1`);
   const [order] = (await response.json()) as Order[];
   return order ?? null;
 }
 
 export async function getOrder(id: string) {
-  const response = await supabaseRequest(`orders?id=eq.${encodeURIComponent(id)}&select=*&limit=1`);
+  const response = await supabaseRequest(`orders?id=eq.${encodeURIComponent(id)}&select=*,order_items(*)&limit=1`);
+  const [order] = (await response.json()) as Order[];
+  return order ?? null;
+}
+
+export async function getOrderByPayDunyaToken(token: string) {
+  const response = await supabaseRequest(`orders?paydunya_token=eq.${encodeURIComponent(token)}&select=*,order_items(*)&limit=1`);
+  const [order] = (await response.json()) as Order[];
+  return order ?? null;
+}
+
+export async function getOrderByCheckoutId(checkoutId: string) {
+  const response = await supabaseRequest(`orders?checkout_id=eq.${encodeURIComponent(checkoutId)}&select=*,order_items(*)&limit=1`);
   const [order] = (await response.json()) as Order[];
   return order ?? null;
 }
@@ -164,32 +201,31 @@ export async function updateOrderByNumber(orderNumber: string, updates: Partial<
   return order;
 }
 
-type FedaPayTransition = {
+type PaymentTransition = {
   processed: boolean;
   order: Order;
 };
 
-export async function approveFedaPayOrder(transactionId: string, eventId: string) {
-  const response = await supabaseRequest("rpc/approve_fedapay_order", {
+export async function approvePayDunyaOrder(token: string) {
+  const response = await supabaseRequest("rpc/approve_paydunya_order", {
     method: "POST",
-    body: JSON.stringify({ p_transaction_id: transactionId, p_event_id: eventId }),
+    body: JSON.stringify({ p_token: token }),
   });
-  return (await response.json()) as FedaPayTransition;
+  return (await response.json()) as PaymentTransition;
 }
 
-export async function failFedaPayOrder(transactionId: string, eventId: string, eventName: "transaction.declined" | "transaction.canceled") {
-  const response = await supabaseRequest("rpc/fail_fedapay_order", {
+export async function failPayDunyaOrder(token: string, status: "cancelled" | "failed") {
+  const response = await supabaseRequest("rpc/fail_paydunya_order", {
     method: "POST",
     body: JSON.stringify({
-      p_transaction_id: transactionId,
-      p_event_id: eventId,
-      p_event_name: eventName,
+      p_token: token,
+      p_status: status,
     }),
   });
-  return (await response.json()) as FedaPayTransition;
+  return (await response.json()) as PaymentTransition;
 }
 
-export async function markOrderNotificationsSent(id: string) {
+export async function claimOrderNotifications(id: string) {
   const response = await supabaseRequest(`orders?id=eq.${encodeURIComponent(id)}&notifications_sent_at=is.null`, {
     method: "PATCH",
     headers: { Prefer: "return=representation" },
@@ -197,6 +233,22 @@ export async function markOrderNotificationsSent(id: string) {
   });
   const [order] = (await response.json()) as Order[];
   return order ?? null;
+}
+
+export async function reserveOrderStock(id: string) {
+  const response = await supabaseRequest("rpc/reserve_order_stock", {
+    method: "POST",
+    body: JSON.stringify({ p_order_id: id }),
+  });
+  return (await response.json()) as PaymentTransition;
+}
+
+export async function releaseOrderStock(id: string) {
+  const response = await supabaseRequest("rpc/release_order_stock", {
+    method: "POST",
+    body: JSON.stringify({ p_order_id: id }),
+  });
+  return (await response.json()) as PaymentTransition;
 }
 
 export async function markOrderStockReserved(id: string) {

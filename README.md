@@ -1,6 +1,6 @@
 # King Of Caps
 
-Boutique Next.js avec catalogue local, administration, commandes Supabase et paiement hébergé FedaPay.
+Boutique Next.js avec catalogue local, administration, commandes Supabase et paiement hébergé PayDunya.
 
 ## Démarrage
 
@@ -30,23 +30,26 @@ cp .env.local.example .env.local
 
 La clé `SUPABASE_SERVICE_ROLE_KEY` est exclusivement utilisée dans les routes serveur pour créer et administrer les commandes. Ne la publiez jamais dans le client ou dans Git.
 
-## FedaPay
+## PayDunya
 
-Ajoutez votre clé secrète et choisissez l’environnement `sandbox` ou `live` :
+Ajoutez les clés de votre application PayDunya et choisissez l’environnement `test` ou `production` :
 
 ```env
-FEDAPAY_SECRET_KEY=...
-FEDAPAY_ENVIRONMENT=sandbox
+PAYDUNYA_MODE=test
+PAYDUNYA_MASTER_KEY=...
+PAYDUNYA_PRIVATE_KEY=...
+PAYDUNYA_PUBLIC_KEY=...
+PAYDUNYA_TOKEN=...
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
-Configurez ensuite le webhook FedaPay vers :
+La facture Checkout Invoice configure automatiquement l’IPN vers :
 
 ```text
-https://votre-domaine.com/api/payments/fedapay/webhook
+https://votre-domaine.com/api/payments/paydunya/ipn
 ```
 
-Le webhook vérifie l’état de la transaction directement auprès de FedaPay avant de définir une commande comme payée. La page de retour de paiement ne modifie jamais ce statut.
+L’IPN et la route de retour vérifient le token directement auprès de PayDunya avant de confirmer la commande. Le stock et les notifications ne sont traités qu’après un statut `completed` vérifié. Exécutez d’abord la migration `20260722_replace_fedapay_with_paydunya.sql`, puis `20260723_add_cart_order_items.sql` avant d’activer le paiement et le panier multi-produits.
 
 ## Notifications
 

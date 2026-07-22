@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import CartLink from "./CartLink";
 
 const WHATSAPP_URL = "https://wa.me/22950687515";
 
@@ -36,6 +37,7 @@ export default function HomeHeader() {
           KING OF CAPS
         </span>
         <div className="flex shrink-0 items-center gap-2">
+          <CartLink />
           <button
             type="button"
             onClick={() => setIsSearchOpen(true)}

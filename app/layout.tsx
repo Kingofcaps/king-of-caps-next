@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Analytics } from "@vercel/analytics/next";
+import { CartProvider } from "./components/CartProvider";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "./lib/seo";
 import "./globals.css";
 
@@ -90,7 +91,7 @@ export default function RootLayout({
       className="h-full antialiased"
     >
       <body className="min-h-full flex flex-col">
-        {children}
+        <CartProvider>{children}</CartProvider>
         <Analytics />
       </body>
     </html>

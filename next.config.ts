@@ -13,7 +13,8 @@ const productImageRemotePatterns = supabaseUrl
       protocol: "https" as const,
       hostname: new URL(supabaseUrl).hostname,
       port: "",
-      pathname: "/storage/v1/object/public/product-images/**",
+      pathname: "/storage/v1/object/public/**",
+      search: "",
     }]
   : [];
 
