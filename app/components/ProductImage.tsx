@@ -5,6 +5,7 @@ import { useState } from "react";
 import {
   logProductImageLoadError,
   normalizeProductImageUrl,
+  productImageLoader,
   PRODUCT_IMAGE_FALLBACK,
   shouldBypassProductImageOptimization,
 } from "@/app/lib/product-image-url";
@@ -23,6 +24,7 @@ export default function ProductImage({ src, alt, unoptimized, ...props }: Produc
       {...props}
       src={displayedSource}
       alt={alt}
+      loader={productImageLoader}
       unoptimized={unoptimized ?? shouldBypassProductImageOptimization(displayedSource)}
       onError={() => {
         if (displayedSource === PRODUCT_IMAGE_FALLBACK) return;

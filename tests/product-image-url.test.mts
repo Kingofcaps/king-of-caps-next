@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import {
   normalizeProductImageUrl,
+  productImageLoader,
   PRODUCT_IMAGE_FALLBACK,
   shouldBypassProductImageOptimization,
 } from "../app/lib/product-image-url.ts";
@@ -47,9 +48,9 @@ test("utilise le fallback pour une ancienne valeur invalide", () => {
   assert.equal(normalizeProductImageUrl(null), PRODUCT_IMAGE_FALLBACK);
 });
 
-test("sert directement les images distantes et conserve l’optimisation locale", () => {
+test("utilise le CDN Supabase et sert directement les autres images distantes", () => {
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://bvgngwwiuykdbgzqcieb.supabase.co";
-  assert.equal(shouldBypassProductImageOptimization(supabaseImage), true);
+  assert.equal(shouldBypassProductImageOptimization(supabaseImage), false);
   assert.equal(shouldBypassProductImageOptimization("https://example.com/cap.jpg"), true);
   assert.equal(shouldBypassProductImageOptimization("/images/logo.jpg"), false);
 });
@@ -59,5 +60,12 @@ test("convertit une ancienne URL signée du bucket public en URL publique brute"
   assert.equal(
     normalizeProductImageUrl(signed),
     "https://bvgngwwiuykdbgzqcieb.supabase.co/storage/v1/object/public/product-images/products/cap.jpg",
+  );
+});
+
+test("génère une variante CDN Supabase adaptée à la taille demandée", () => {
+  assert.equal(
+    productImageLoader({ src: supabaseImage, width: 640, quality: 90 }),
+    "https://bvgngwwiuykdbgzqcieb.supabase.co/storage/v1/render/image/public/product-images/products/cap.jpg?width=640&quality=90&resize=cover",
   );
 });

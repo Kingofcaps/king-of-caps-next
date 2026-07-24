@@ -2,6 +2,7 @@ export const PRODUCT_IMAGE_FALLBACK = "/images/product-image-unavailable.svg";
 
 const NEXT_IMAGE_PATH = "/_next/image";
 const PUBLIC_BUCKET_PATH = "/storage/v1/object/public/product-images/";
+const RENDER_BUCKET_PATH = "/storage/v1/render/image/public/product-images/";
 const SIGNED_BUCKET_PATH = "/storage/v1/object/sign/product-images/";
 const LEGACY_LOGO_PATH = "/images/logo.jpg";
 
@@ -118,11 +119,41 @@ export function normalizeProductImageUrl(value: unknown): string {
   return PRODUCT_IMAGE_FALLBACK;
 }
 
-export function logProductImageLoadError(value: string) {
+export function logProductImageLoadError(value: string, productName?: string) {
   if (process.env.NODE_ENV !== "development") return;
-  console.warn("[images] échec de chargement du src produit :", value);
+  console.warn("[images] échec de chargement du src produit :", {
+    produit: productName || "Produit inconnu",
+    url: value,
+  });
 }
 
 export function shouldBypassProductImageOptimization(value: string) {
-  return !value.startsWith("/");
+  try {
+    return !new URL(value).pathname.startsWith(PUBLIC_BUCKET_PATH);
+  } catch {
+    return false;
+  }
+}
+
+export function productImageLoader({
+  src,
+  width,
+  quality,
+}: {
+  src: string;
+  width: number;
+  quality?: number;
+}) {
+  try {
+    const url = new URL(src);
+    if (!url.pathname.startsWith(PUBLIC_BUCKET_PATH)) return src;
+
+    url.pathname = url.pathname.replace(PUBLIC_BUCKET_PATH, RENDER_BUCKET_PATH);
+    url.searchParams.set("width", String(width));
+    url.searchParams.set("quality", String(quality ?? 90));
+    url.searchParams.set("resize", "cover");
+    return url.toString();
+  } catch {
+    return src;
+  }
 }
