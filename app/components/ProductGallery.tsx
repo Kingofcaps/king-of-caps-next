@@ -63,7 +63,7 @@ export default function ProductGallery({ products }: { products: Product[] }) {
                   <ProductCardImage
                     src={product.image}
                     alt={product.name}
-                    className="object-contain object-center"
+                    className="object-cover object-center"
                   />
                   {product.images.length > 1 && (
                     <span className="absolute bottom-2 right-2 rounded-full bg-black/65 px-2 py-1 text-[9px] font-bold text-white shadow-sm backdrop-blur-sm sm:text-xs">
