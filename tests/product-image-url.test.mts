@@ -66,6 +66,6 @@ test("convertit une ancienne URL signée du bucket public en URL publique brute"
 test("génère une variante CDN Supabase adaptée à la taille demandée", () => {
   assert.equal(
     productImageLoader({ src: supabaseImage, width: 640, quality: 90 }),
-    "https://bvgngwwiuykdbgzqcieb.supabase.co/storage/v1/render/image/public/product-images/products/cap.jpg?width=640&quality=90&resize=cover",
+    "https://bvgngwwiuykdbgzqcieb.supabase.co/storage/v1/render/image/public/product-images/products/cap.jpg?width=640&quality=90&resize=contain",
   );
 });

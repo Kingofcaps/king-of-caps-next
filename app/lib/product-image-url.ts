@@ -151,7 +151,7 @@ export function productImageLoader({
     url.pathname = url.pathname.replace(PUBLIC_BUCKET_PATH, RENDER_BUCKET_PATH);
     url.searchParams.set("width", String(width));
     url.searchParams.set("quality", String(quality ?? 90));
-    url.searchParams.set("resize", "cover");
+    url.searchParams.set("resize", "contain");
     return url.toString();
   } catch {
     return src;
