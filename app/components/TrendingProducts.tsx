@@ -19,7 +19,7 @@ function TrendingCard({ product, duplicate = false }: { product: Product; duplic
         <ProductCardImage
           src={product.image}
           alt={product.name}
-          className="object-cover object-center transition duration-500 group-hover:scale-[1.03]"
+          className="object-contain object-center"
         />
         {product.images.length > 1 && (
           <span className="absolute bottom-2 right-2 rounded-full bg-black/65 px-2 py-1 text-[10px] font-bold text-white shadow-sm backdrop-blur-sm">
