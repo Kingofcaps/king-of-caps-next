@@ -2,7 +2,6 @@ import Link from "next/link";
 import {
   BadgeCheck,
   HeartHandshake,
-  Instagram,
   Mail,
   MessageCircle,
   Music2,
@@ -80,7 +79,7 @@ export default function StorefrontBottom() {
               <p className="mt-3 max-w-md text-xl font-black tracking-[-0.03em] sm:text-2xl lg:text-3xl">Le royaume de la casquette au Bénin.</p>
               <p className="mt-3 max-w-lg text-sm leading-6 text-zinc-400">Des pièces sélectionnées avec soin, un service attentif et une expérience pensée pour vous.</p>
             </div>
-            <nav aria-label="Liens de bas de page" className="flex items-center gap-4 text-sm font-bold sm:gap-5">
+            <nav aria-label="Liens de bas de page" className="flex flex-col items-start gap-2 text-sm font-bold">
               <Link href="/#collection" className="transition hover:text-[#d4af37]">La collection</Link>
               <div className="flex items-center gap-1 sm:gap-2">
                 <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" aria-label="Contacter KING OF CAPS sur WhatsApp" className="grid h-10 w-10 place-items-center rounded-full text-white transition hover:text-[#d4af37] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4af37]">
@@ -90,7 +89,11 @@ export default function StorefrontBottom() {
                   <Mail aria-hidden="true" className="h-5 w-5" strokeWidth={1.8} />
                 </a>
                 <a href="https://www.instagram.com/king_0f_caps" target="_blank" rel="noopener noreferrer" aria-label="Suivre KING OF CAPS sur Instagram" className="grid h-10 w-10 place-items-center rounded-full text-white transition hover:text-[#d4af37] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4af37]">
-                  <Instagram aria-hidden="true" className="h-5 w-5" strokeWidth={1.8} />
+                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                    <rect width="18" height="18" x="3" y="3" rx="5" />
+                    <circle cx="12" cy="12" r="4" />
+                    <circle cx="17.4" cy="6.6" r="0.8" fill="currentColor" stroke="none" />
+                  </svg>
                 </a>
                 <a href="https://www.tiktok.com/@king.of.caps_" target="_blank" rel="noopener noreferrer" aria-label="Suivre KING OF CAPS sur TikTok" className="grid h-10 w-10 place-items-center rounded-full text-white transition hover:text-[#d4af37] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4af37]">
                   <Music2 aria-hidden="true" className="h-5 w-5" strokeWidth={1.8} />

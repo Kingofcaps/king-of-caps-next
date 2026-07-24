@@ -27,8 +27,10 @@ type ProductRecord = {
   description: string;
   image: unknown;
   image_url?: unknown;
+  imageUrl?: unknown;
   main_image?: unknown;
   product_image?: unknown;
+  productImage?: unknown;
   images: unknown;
   brand: string;
   category: string;
@@ -90,12 +92,26 @@ function normalizeImages(value: unknown, primaryImage: unknown) {
 function toProduct(record: ProductRecord): Product {
   const stockQuantity = Math.max(0, Math.floor(Number(record.stock_quantity) || 0));
   const available = record.available !== false && stockQuantity > 0;
-  const rawImage = [record.image, record.image_url, record.main_image, record.product_image, record.images];
+  const rawImageFields = {
+    image: record.image,
+    image_url: record.image_url,
+    imageUrl: record.imageUrl,
+    product_image: record.product_image,
+    productImage: record.productImage,
+  };
+  const rawImage = [
+    ...Object.values(rawImageFields),
+    record.main_image,
+    record.images,
+  ];
   const normalizedImage = normalizeProductImageUrl(rawImage);
 
   if (process.env.NODE_ENV === "development") {
-    console.log("IMAGE PRODUIT BRUTE:", rawImage);
-    console.log("IMAGE PRODUIT NORMALISÉE:", normalizedImage);
+    console.log("[IMAGE PRODUIT]", {
+      nom: record.name,
+      valeurBrute: rawImageFields,
+      urlFinale: normalizedImage === PRODUCT_IMAGE_FALLBACK ? null : normalizedImage,
+    });
   }
 
   return {

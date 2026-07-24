@@ -56,5 +56,8 @@ test("sert directement les images distantes et conserve l’optimisation locale"
 
 test("convertit une ancienne URL signée du bucket public en URL publique brute", () => {
   const signed = "https://bvgngwwiuykdbgzqcieb.supabase.co/storage/v1/object/sign/product-images/products/cap.jpg?token=expired";
-  assert.equal(normalizeProductImageUrl(signed), "https://bvgngwwiuykdbgzqcieb.supabase.co/storage/v1/object/public/product-images/products/cap.jpg");
+  assert.equal(
+    normalizeProductImageUrl(signed),
+    "https://bvgngwwiuykdbgzqcieb.supabase.co/storage/v1/object/public/product-images/products/cap.jpg",
+  );
 });

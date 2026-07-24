@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEven
 import { selectFeaturedProducts } from "@/app/lib/featured-products";
 import type { Product } from "@/app/lib/products";
 import styles from "./TrendingProducts.module.css";
-import ProductImage from "./ProductImage";
+import ProductCardImage from "./ProductCardImage";
 
 function TrendingCard({ product, duplicate = false }: { product: Product; duplicate?: boolean }) {
   return (
@@ -16,11 +16,9 @@ function TrendingCard({ product, duplicate = false }: { product: Product; duplic
       aria-label={`Voir ${product.name}`}
     >
       <div className="relative aspect-square overflow-hidden bg-zinc-100">
-        <ProductImage
+        <ProductCardImage
           src={product.image}
           alt={product.name}
-          fill
-          sizes="(max-width: 767px) 40vw, (max-width: 1279px) 176px, 192px"
           className="object-cover object-center transition duration-500 group-hover:scale-[1.03]"
         />
         {product.images.length > 1 && (

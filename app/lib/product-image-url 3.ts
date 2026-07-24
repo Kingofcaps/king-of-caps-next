@@ -2,7 +2,8 @@ export const PRODUCT_IMAGE_FALLBACK = "/images/product-image-unavailable.svg";
 
 const NEXT_IMAGE_PATH = "/_next/image";
 const PUBLIC_BUCKET_PATH = "/storage/v1/object/public/product-images/";
-const SIGNED_BUCKET_PATH = "/storage/v1/object/sign/product-images/";
+const RENDER_BUCKET_PATH = "/storage/v1/render/image/public/product-images/";
+const PRODUCT_IMAGES_BUCKET_PREFIX = "product-images/";
 const LEGACY_LOGO_PATH = "/images/logo.jpg";
 
 function logInvalidProductImage(value: unknown) {
@@ -69,9 +70,47 @@ function unwrapNextImageUrl(value: string) {
   }
 }
 
-function cleanSearchParams(url: URL) {
-  for (const parameter of ["w", "q", "width", "quality"]) url.searchParams.delete(parameter);
-  url.hash = "";
+function configuredSupabaseOrigin() {
+  const configuredUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  if (!configuredUrl) return null;
+
+  try {
+    return new URL(configuredUrl).origin;
+  } catch {
+    return null;
+  }
+}
+
+function encodeStoragePath(value: string) {
+  const segments = value.split("/").filter(Boolean);
+  if (segments.length === 0 || segments.some((segment) => segment === "." || segment === "..")) {
+    return null;
+  }
+
+  try {
+    return segments
+      .map((segment) => encodeURIComponent(decodeURIComponent(segment)))
+      .join("/");
+  } catch {
+    return null;
+  }
+}
+
+function publicSupabaseUrlFromRelativePath(value: string) {
+  const origin = configuredSupabaseOrigin();
+  if (!origin) return null;
+
+  let storagePath = value.trim().replace(/^\/+/, "");
+  if (storagePath.startsWith(PUBLIC_BUCKET_PATH.slice(1))) {
+    storagePath = storagePath.slice(PUBLIC_BUCKET_PATH.length - 1);
+  } else if (storagePath.startsWith(PRODUCT_IMAGES_BUCKET_PREFIX)) {
+    storagePath = storagePath.slice(PRODUCT_IMAGES_BUCKET_PREFIX.length);
+  } else if (storagePath.startsWith("storage/v1/object/public/")) {
+    return null;
+  }
+
+  const encodedPath = encodeStoragePath(storagePath);
+  return encodedPath ? `${origin}${PUBLIC_BUCKET_PATH}${encodedPath}` : null;
 }
 
 function normalizeCandidate(value: string) {
@@ -80,30 +119,28 @@ function normalizeCandidate(value: string) {
   if (!candidate || candidate.startsWith(NEXT_IMAGE_PATH) || /[\u0000-\u001f\u007f]/.test(candidate)) return null;
 
   if (candidate.startsWith("/") && !candidate.startsWith("//")) {
+    if (candidate.startsWith(PUBLIC_BUCKET_PATH)) {
+      return publicSupabaseUrlFromRelativePath(candidate);
+    }
+
     try {
       const url = new URL(candidate, "http://king-of-caps.local");
       if (url.pathname === LEGACY_LOGO_PATH) return null;
-      cleanSearchParams(url);
       return `${url.pathname}${url.search}`;
     } catch {
       return null;
     }
   }
 
-  if (!/^https?:\/\//i.test(candidate)) return null;
+  if (!/^https?:\/\//i.test(candidate)) {
+    return publicSupabaseUrlFromRelativePath(candidate);
+  }
 
   try {
     const url = new URL(candidate);
     if (!(["http:", "https:"] as string[]).includes(url.protocol) || url.username || url.password) return null;
     if (url.pathname === LEGACY_LOGO_PATH) return null;
-    if (url.pathname.startsWith(SIGNED_BUCKET_PATH)) {
-      url.pathname = url.pathname.replace(SIGNED_BUCKET_PATH, PUBLIC_BUCKET_PATH);
-      url.search = "";
-    } else {
-      cleanSearchParams(url);
-    }
-    const pathname = decodeURI(url.pathname);
-    return `${url.origin}${pathname}${url.search}`;
+    return candidate;
   } catch {
     return null;
   }
@@ -118,11 +155,33 @@ export function normalizeProductImageUrl(value: unknown): string {
   return PRODUCT_IMAGE_FALLBACK;
 }
 
-export function logProductImageLoadError(value: string) {
+export function logProductImageLoadError(value: string, productName?: string) {
   if (process.env.NODE_ENV !== "development") return;
-  console.warn("[images] échec de chargement du src produit :", value);
+  console.warn("[images] image produit inaccessible", {
+    produit: productName || "Produit inconnu",
+    url: value,
+  });
 }
 
-export function shouldBypassProductImageOptimization(value: string) {
-  return !value.startsWith("/");
+export function productImageLoader({
+  src,
+  width,
+  quality,
+}: {
+  src: string;
+  width: number;
+  quality?: number;
+}) {
+  try {
+    const url = new URL(src);
+    if (!url.pathname.startsWith(PUBLIC_BUCKET_PATH)) return src;
+
+    url.pathname = url.pathname.replace(PUBLIC_BUCKET_PATH, RENDER_BUCKET_PATH);
+    url.searchParams.set("width", String(width));
+    url.searchParams.set("quality", String(quality ?? 90));
+    url.searchParams.set("resize", "cover");
+    return url.toString();
+  } catch {
+    return src;
+  }
 }

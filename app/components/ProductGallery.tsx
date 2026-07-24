@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { formatDualPrice } from "@/app/lib/prices";
 import type { Product } from "@/app/lib/products";
 import ProductReveal from "./ProductReveal";
-import ProductImage from "./ProductImage";
+import ProductCardImage from "./ProductCardImage";
 import TrendingProducts from "./TrendingProducts";
 
 const WHATSAPP_URL = "https://wa.me/22950687515";
@@ -60,11 +60,9 @@ export default function ProductGallery({ products }: { products: Product[] }) {
                 aria-label={`Voir ${product.name}`}
               >
                 <div className="relative aspect-[4/5] overflow-hidden rounded-t-[18px] bg-zinc-100">
-                  <ProductImage
+                  <ProductCardImage
                     src={product.image}
                     alt={product.name}
-                    fill
-                    sizes="(max-width: 639px) 33vw, (max-width: 1023px) 50vw, 25vw"
                     className="object-cover object-center transition duration-500 group-hover:scale-105"
                   />
                   {product.images.length > 1 && (
