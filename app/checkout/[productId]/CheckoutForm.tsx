@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useCart } from "@/app/components/CartProvider";
 import { PENDING_CART_ORDER_KEY, cartItemCount, cartSubtotal, type CartItem } from "@/app/lib/cart";
 import { checkoutButtonLabel, paymentMethodLabel, PAYMENT_OPTIONS } from "@/app/lib/checkout";
+import { generateCheckoutId } from "@/app/lib/client-id";
 import type { PaymentMethod } from "@/app/lib/orders";
 import { formatDualPrice } from "@/app/lib/prices";
 import { isValidEmail } from "@/app/lib/validation";
@@ -54,7 +55,7 @@ export default function CheckoutForm({
     if (missing) return setError(`Veuillez renseigner votre ${missing[1]}.`);
     if (!isValidEmail(email)) return setError("Veuillez saisir une adresse e-mail valide.");
 
-    checkoutIdRef.current ??= globalThis.crypto.randomUUID();
+    checkoutIdRef.current ??= generateCheckoutId();
     submissionStarted.current = true;
     setLoading(true);
     setError("");

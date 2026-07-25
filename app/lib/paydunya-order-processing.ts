@@ -3,6 +3,7 @@ import {
   approvePayDunyaOrder,
   claimOrderNotifications,
   failPayDunyaOrder,
+  getOrder,
   getOrderByPayDunyaToken,
 } from "@/app/lib/orders";
 import { verifyPayDunyaPayment } from "@/app/lib/paydunya";
@@ -25,15 +26,16 @@ export async function processPayDunyaOrder(token: string) {
     failOrder: failPayDunyaOrder,
     claimNotifications: async (order) => Boolean(await claimOrderNotifications(order.id)),
     sendNotifications: async (order) => {
+      const orderWithItems = await getOrder(order.id) ?? order;
       const results = await Promise.allSettled([
-        notifyNewOrder(order),
-        sendCustomerOrderConfirmation(order),
+        notifyNewOrder(orderWithItems),
+        sendCustomerOrderConfirmation(orderWithItems),
       ]);
       if (results[0].status === "rejected") {
-        console.error(`Échec de la notification administrateur pour la commande ${order.order_number}.`);
+        console.error(`Échec de la notification administrateur pour la commande ${order.order_number}.`, results[0].reason);
       }
       if (results[1].status === "rejected") {
-        console.error(`Échec de la confirmation client pour la commande ${order.order_number}.`);
+        console.error(`Échec de la confirmation client pour la commande ${order.order_number}.`, results[1].reason);
       }
     },
   });

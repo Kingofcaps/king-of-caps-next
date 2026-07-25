@@ -9,6 +9,7 @@ import {
   Truck,
   type LucideIcon,
 } from "lucide-react";
+import PushNotificationButton from "./PushNotificationButton";
 
 const WHATSAPP_URL = "https://wa.me/22950687515";
 
@@ -99,6 +100,7 @@ export default function StorefrontBottom() {
                   <Music2 aria-hidden="true" className="h-5 w-5" strokeWidth={1.8} />
                 </a>
               </div>
+              <PushNotificationButton />
             </nav>
           </div>
           <div className="flex flex-col gap-2 pt-5 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between">

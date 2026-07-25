@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
-import type { Order, OrderStatus } from "@/app/lib/orders";
+import type { Order, OrderItem, OrderStatus } from "@/app/lib/orders";
 import { formatDualPrice, formatFcfaPrice, parsePrice } from "@/app/lib/prices";
+import { generateClientId } from "@/app/lib/client-id";
 import type { Product } from "@/app/lib/products";
 import CampaignLinkGenerator from "./CampaignLinkGenerator";
 import ProductImage from "@/app/components/ProductImage";
@@ -109,6 +110,21 @@ function orderWhatsAppUrl(order: Order) {
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 }
 
+type DisplayOrderItem = Pick<OrderItem, "id" | "product_name" | "product_image" | "quantity">;
+
+function getDisplayOrderItems(order: Order): DisplayOrderItem[] {
+  if (Array.isArray(order.order_items) && order.order_items.length > 0) {
+    return order.order_items;
+  }
+
+  return [{
+    id: `legacy-${order.id}`,
+    product_name: order.product_name,
+    product_image: order.product_image,
+    quantity: order.quantity,
+  }];
+}
+
 function dayKey(value: string | Date) {
   const date = new Date(value);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -195,7 +211,8 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     const now = new Date();
     const fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (ordersDateFilter === "last_7_days" ? 6 : 29));
     const result = orders.filter((order) => {
-      const matchesSearch = !query || [order.order_number, order.customer_first_name, order.customer_last_name, order.customer_phone, order.product_name].some((value) => value.toLowerCase().includes(query));
+      const productNames = getDisplayOrderItems(order).map((item) => item.product_name);
+      const matchesSearch = !query || [order.order_number, order.customer_first_name, order.customer_last_name, order.customer_phone, ...productNames].some((value) => value.toLowerCase().includes(query));
       const matchesFilter = ordersFilter === "all" || (ordersFilter === "payment_pending" && order.payment_status === "pending") || (ordersFilter === "paid" && order.payment_status === "paid") || (ordersFilter in orderStatusLabels && order.order_status === ordersFilter);
       const orderDate = new Date(order.created_at);
       const matchesDate = ordersDateFilter === "all" || (ordersDateFilter === "today" && dayKey(order.created_at) === today) || (ordersDateFilter !== "today" && orderDate >= fromDate);
@@ -450,7 +467,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     const rows = files.map((file) => {
       const preview = URL.createObjectURL(file);
       return {
-        id: globalThis.crypto?.randomUUID?.() ?? preview,
+        id: generateClientId("bulk-product"),
         file,
         preview,
         name: "",
@@ -830,7 +847,9 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
         body: JSON.stringify({ orderStatus }),
       });
       const order = await readResponse<Order>(response);
-      setOrders((current) => current.map((item) => item.id === order.id ? order : item));
+      setOrders((current) => current.map((item) => item.id === order.id
+        ? { ...order, order_items: Array.isArray(order.order_items) ? order.order_items : item.order_items }
+        : item));
       setOrdersMessage(`Commande ${order.order_number} mise à jour.`);
     } catch (error) {
       setOrdersError(error instanceof Error ? error.message : "Impossible de modifier la commande.");
@@ -1144,16 +1163,18 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
 
 function OrderCard({ order, isUpdating, isExpanded, onStatusChange, onToggleDetails, onDelete }: { order: Order; isUpdating: boolean; isExpanded: boolean; onStatusChange: (id: string, status: OrderStatus) => void; onToggleDetails: () => void; onDelete: () => void }) {
   const whatsappUrl = orderWhatsAppUrl(order);
+  const orderItems = getDisplayOrderItems(order);
+  const totalQuantity = orderItems.reduce((total, item) => total + item.quantity, 0);
 
   return (
     <article className="rounded-2xl border border-[#e5e5e5] bg-[#fafafa] p-4">
-      <div className="grid gap-4 lg:grid-cols-[auto_1fr_auto]">
-        <div className="relative h-[72px] w-[72px] overflow-hidden rounded-xl bg-zinc-100"><ProductImage src={order.product_image} alt={order.product_name} fill sizes="72px" className="object-cover" /></div>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
         <div>
           <p className="text-xs font-bold tracking-wide text-[#c9a227]">{order.order_number}</p>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1"><h3 className="font-black">{order.product_name}</h3><span className="text-sm font-bold text-[#c9a227]">{formatDualPrice(order.total_amount)}</span></div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1"><h3 className="font-black">{orderItems.length} article{orderItems.length > 1 ? "s" : ""}</h3><span className="text-sm font-bold text-[#c9a227]">{formatDualPrice(order.total_amount)}</span></div>
           <p className="mt-1 text-sm text-zinc-700">{order.customer_first_name} {order.customer_last_name} · {order.customer_phone}</p>
-          <p className="mt-1 text-sm text-zinc-500">{order.quantity} unité(s) · {paymentMethodLabel(order.payment_method)} · {new Date(order.created_at).toLocaleDateString("fr-FR")}</p>
+          <p className="mt-1 text-sm text-zinc-500">{totalQuantity} unité(s) · {paymentMethodLabel(order.payment_method)} · {new Date(order.created_at).toLocaleDateString("fr-FR")}</p>
+          <OrderItemsList items={orderItems} />
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold"><span className={`rounded-full px-2.5 py-1 ${paymentStatusClassNames[order.payment_status]}`}>Paiement : {paymentStatusLabels[order.payment_status]}</span><span className={`rounded-full px-2.5 py-1 ${orderStatusClassNames[order.order_status]}`}>Statut : {orderStatusLabels[order.order_status]}</span></div>
         </div>
         <label className="text-sm font-bold text-zinc-700"><span className="mb-2 block">Statut commande</span><select disabled={isUpdating} value={order.order_status} onChange={(event) => onStatusChange(order.id, event.target.value as OrderStatus)} className="w-full rounded-xl border border-[#e5e5e5] bg-white px-3 py-2 text-sm font-bold text-[#a8861e] outline-none disabled:cursor-wait disabled:opacity-60"><option value="new">Nouvelle</option><option value="pending">En attente</option><option value="awaiting_payment">Paiement en attente</option><option value="confirmed">Confirmée</option><option value="preparing">En préparation</option><option value="delivered">Livrée</option><option value="cancelled">Annulée</option></select>{isUpdating && <span className="mt-2 block text-xs text-[#a8861e]">Mise à jour...</span>}</label>
@@ -1163,9 +1184,27 @@ function OrderCard({ order, isUpdating, isExpanded, onStatusChange, onToggleDeta
         <button type="button" onClick={onToggleDetails} className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-2 text-sm font-black text-black transition hover:border-[#c9a227] hover:text-[#a8861e]">{isExpanded ? "Masquer les détails" : "Voir les détails"}</button>
         <button type="button" onClick={onDelete} className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-black text-red-700 transition hover:bg-red-100"><svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M6 6l1 14h10l1-14" /><path d="M10 11v5M14 11v5" /></svg>Supprimer</button>
       </div>
-      {isExpanded && <dl className="mt-4 grid gap-3 rounded-xl border border-[#e5e5e5] bg-white p-4 text-sm sm:grid-cols-2"><OrderDetail label="Client" value={`${order.customer_first_name} ${order.customer_last_name}`} /><OrderDetail label="Téléphone" value={order.customer_phone} /><OrderDetail label="E-mail" value={order.customer_email || "Non renseigné"} /><OrderDetail label="Adresse" value={order.customer_address} /><OrderDetail label="Ville ou quartier" value={order.customer_city} /><OrderDetail label="Informations complémentaires" value={order.customer_note || "Aucune"} /><OrderDetail label="Produit" value={order.product_name} /><OrderDetail label="Quantité" value={String(order.quantity)} /><OrderDetail label="Total" value={formatDualPrice(order.total_amount)} /><OrderDetail label="Paiement" value={paymentMethodLabel(order.payment_method)} /><OrderDetail label="Statut du paiement" value={paymentStatusLabels[order.payment_status]} /><OrderDetail label="Statut de la commande" value={orderStatusLabels[order.order_status]} /><OrderDetail label="Date" value={new Date(order.created_at).toLocaleString("fr-FR")} /></dl>}
+      {isExpanded && <div className="mt-4 rounded-xl border border-[#e5e5e5] bg-white p-4">
+        <section aria-labelledby={`ordered-items-${order.id}`}>
+          <h4 id={`ordered-items-${order.id}`} className="text-sm font-black text-black">Articles commandés</h4>
+          <OrderItemsList items={orderItems} detailed />
+        </section>
+        <dl className="mt-4 grid gap-3 border-t border-[#e5e5e5] pt-4 text-sm sm:grid-cols-2"><OrderDetail label="Client" value={`${order.customer_first_name} ${order.customer_last_name}`} /><OrderDetail label="Téléphone" value={order.customer_phone} /><OrderDetail label="E-mail" value={order.customer_email || "Non renseigné"} /><OrderDetail label="Adresse" value={order.customer_address} /><OrderDetail label="Ville ou quartier" value={order.customer_city} /><OrderDetail label="Informations complémentaires" value={order.customer_note || "Aucune"} /><OrderDetail label="Total" value={formatDualPrice(order.total_amount)} /><OrderDetail label="Paiement" value={paymentMethodLabel(order.payment_method)} /><OrderDetail label="Statut du paiement" value={paymentStatusLabels[order.payment_status]} /><OrderDetail label="Statut de la commande" value={orderStatusLabels[order.order_status]} /><OrderDetail label="Date" value={new Date(order.created_at).toLocaleString("fr-FR")} /></dl>
+      </div>}
     </article>
   );
+}
+
+function OrderItemsList({ items, detailed = false }: { items: DisplayOrderItem[]; detailed?: boolean }) {
+  return <ul className={`${detailed ? "mt-3" : "mt-3 max-w-2xl"} space-y-1.5`}>
+    {items.map((item) => <li key={item.id} className="flex min-w-0 items-center gap-2 rounded-lg border border-[#ececec] bg-white p-1.5">
+      <div className={`relative shrink-0 overflow-hidden rounded-md bg-zinc-100 ${detailed ? "h-11 w-11" : "h-9 w-9"}`}>
+        <ProductImage src={item.product_image} alt={item.product_name} fill sizes={detailed ? "44px" : "36px"} className="object-cover" />
+      </div>
+      <span className="min-w-0 flex-1 truncate text-sm font-bold text-zinc-800">{item.product_name}</span>
+      <span className="shrink-0 text-sm font-black text-black">x{item.quantity}</span>
+    </li>)}
+  </ul>;
 }
 
 function OrderDetail({ label, value }: { label: string; value: string }) {

@@ -53,7 +53,7 @@ L’IPN et la route de retour vérifient le token directement auprès de PayDuny
 
 ## Notifications
 
-Les nouvelles commandes déclenchent une notification Resend côté serveur après leur insertion dans Supabase. Ajoutez `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (une adresse ou un domaine vérifié dans Resend) et `ORDER_NOTIFICATION_EMAIL` dans `.env.local`. Si Resend est indisponible, la commande reste enregistrée et l’erreur est journalisée uniquement côté serveur.
+Les nouvelles commandes déclenchent une notification Resend côté serveur après leur insertion dans Supabase. Utilisez les mêmes variables `RESEND_API_KEY` et `ORDER_NOTIFICATION_EMAIL` dans `.env.local` et dans Vercel. Tous les e-mails sont envoyés depuis `KING OF CAPS <command@kingofcaps.bj>`. Si Resend est indisponible, la commande reste enregistrée et l’erreur est journalisée uniquement côté serveur.
 
 ## Vérifications
 

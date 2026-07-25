@@ -174,10 +174,10 @@ export async function POST(request: Request) {
             sendCustomerOrderConfirmation(order),
           ]);
           if (emailResults[0].status === "rejected") {
-            console.error(`Échec de la notification administrateur pour la commande ${order.order_number}.`);
+            console.error(`Échec de la notification administrateur pour la commande ${order.order_number}.`, emailResults[0].reason);
           }
           if (emailResults[1].status === "rejected") {
-            console.error(`Échec de la confirmation client pour la commande ${order.order_number}.`);
+            console.error(`Échec de la confirmation client pour la commande ${order.order_number}.`, emailResults[1].reason);
           }
         },
         createOnlineInvoice: (paymentMethod) => createPayDunyaCheckout({ ...orderDetails, items: orderItems }, paymentMethod),

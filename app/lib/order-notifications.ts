@@ -3,7 +3,7 @@ import type { Order } from "@/app/lib/orders";
 import { formatDualPrice } from "@/app/lib/prices";
 import { isValidEmail } from "@/app/lib/validation";
 
-const CUSTOMER_EMAIL_FROM = "KING OF CAPS <commandes@kingofcaps.bj>";
+const EMAIL_FROM = "KING OF CAPS <command@kingofcaps.bj>";
 const STOREFRONT_URL = "https://www.kingofcaps.bj";
 const WHATSAPP_URL = "https://wa.me/22950687515";
 
@@ -29,14 +29,19 @@ function getResendApiKey() {
 
 function getNotificationConfig() {
   const apiKey = getResendApiKey();
-  const notificationEmail = process.env.ORDER_NOTIFICATION_EMAIL;
-  const from = process.env.RESEND_FROM_EMAIL;
+  const notificationEmail = process.env.ORDER_NOTIFICATION_EMAIL?.trim();
 
-  if (!notificationEmail || !from) {
+  if (!notificationEmail) {
     throw new Error("La notification e-mail n’est pas configurée.");
   }
+  if (!isValidEmail(notificationEmail)) {
+    throw new Error("L’adresse ORDER_NOTIFICATION_EMAIL est invalide.");
+  }
 
-  return { apiKey, notificationEmail, from };
+  return {
+    apiKey,
+    notificationEmail,
+  };
 }
 
 function orderItemLines(order: Order) {
@@ -50,30 +55,55 @@ function orderItemsHtml(order: Order) {
   return orderItemLines(order).map((line) => `<li>${escapeHtml(line)}</li>`).join("");
 }
 
+function maskedEmail(email: string) {
+  const [localPart, domain] = email.split("@");
+  return `${localPart.slice(0, 2)}***@${domain}`;
+}
+
 export async function notifyNewOrder(order: Order) {
-  const { apiKey, notificationEmail, from } = getNotificationConfig();
+  const { apiKey, notificationEmail } = getNotificationConfig();
   const customerName = `${order.customer_first_name} ${order.customer_last_name}`;
   const resend = new Resend(apiKey);
-  const { error } = await resend.emails.send(
+  console.info("[order-email][admin] Tentative d’envoi.", {
+    orderNumber: order.order_number,
+    recipient: maskedEmail(notificationEmail),
+    recipientVariable: "ORDER_NOTIFICATION_EMAIL",
+    itemCount: order.order_items?.length || 1,
+  });
+
+  const { data, error } = await resend.emails.send(
     {
-      from,
+      from: EMAIL_FROM,
       to: [notificationEmail],
       subject: `Nouvelle commande ${order.order_number}`,
       text: [
         `Commande : ${order.order_number}`,
         `Client : ${customerName}`,
         `Téléphone : ${order.customer_phone}`,
+        `Adresse : ${order.customer_address}`,
+        `Ville ou arrondissement : ${order.customer_city}`,
         "Articles :",
         ...orderItemLines(order).map((line) => `- ${line}`),
         `Total : ${formatDualPrice(order.total_amount)}`,
-        `Paiement : ${order.payment_method}`,
+        `Paiement : ${paymentMethodLabel(order.payment_method)}`,
       ].join("\n"),
-      html: `<h1>Nouvelle commande ${escapeHtml(order.order_number)}</h1><p><strong>Client :</strong> ${escapeHtml(customerName)}</p><p><strong>Téléphone :</strong> ${escapeHtml(order.customer_phone)}</p><p><strong>Articles :</strong></p><ul>${orderItemsHtml(order)}</ul><p><strong>Total :</strong> ${escapeHtml(formatDualPrice(order.total_amount))}</p><p><strong>Paiement :</strong> ${escapeHtml(order.payment_method)}</p>`,
+      html: `<h1>Nouvelle commande ${escapeHtml(order.order_number)}</h1><p><strong>Client :</strong> ${escapeHtml(customerName)}</p><p><strong>Téléphone :</strong> ${escapeHtml(order.customer_phone)}</p><p><strong>Adresse :</strong> ${escapeHtml(order.customer_address)}</p><p><strong>Ville ou arrondissement :</strong> ${escapeHtml(order.customer_city)}</p><p><strong>Articles :</strong></p><ul>${orderItemsHtml(order)}</ul><p><strong>Total :</strong> ${escapeHtml(formatDualPrice(order.total_amount))}</p><p><strong>Paiement :</strong> ${escapeHtml(paymentMethodLabel(order.payment_method))}</p>`,
     },
     { idempotencyKey: `admin-order-${order.id}` },
   );
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    console.error("[order-email][admin] Resend a refusé l’envoi.", {
+      orderNumber: order.order_number,
+      message: error.message,
+    });
+    throw new Error(error.message);
+  }
+
+  console.info("[order-email][admin] Envoi accepté par Resend.", {
+    orderNumber: order.order_number,
+    messageId: data?.id ?? null,
+  });
 }
 
 function paymentMethodLabel(method: Order["payment_method"]) {
@@ -201,9 +231,14 @@ export async function sendCustomerOrderConfirmation(order: Order) {
   }
 
   const resend = new Resend(getResendApiKey());
-  const { error } = await resend.emails.send(
+  console.info("[order-email][customer] Tentative d’envoi.", {
+    orderNumber: order.order_number,
+    recipient: maskedEmail(customerEmail),
+  });
+
+  const { data, error } = await resend.emails.send(
     {
-      from: CUSTOMER_EMAIL_FROM,
+      from: EMAIL_FROM,
       to: [customerEmail],
       subject: `Confirmation de votre commande KING OF CAPS — ${order.order_number}`,
       text: customerEmailText(order),
@@ -212,5 +247,16 @@ export async function sendCustomerOrderConfirmation(order: Order) {
     { idempotencyKey: `customer-order-${order.id}` },
   );
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    console.error("[order-email][customer] Resend a refusé l’envoi.", {
+      orderNumber: order.order_number,
+      message: error.message,
+    });
+    throw new Error(error.message);
+  }
+
+  console.info("[order-email][customer] Envoi accepté par Resend.", {
+    orderNumber: order.order_number,
+    messageId: data?.id ?? null,
+  });
 }
