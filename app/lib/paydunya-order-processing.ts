@@ -17,7 +17,7 @@ export async function processPayDunyaOrder(token: string) {
         getOrderByPayDunyaToken(invoiceToken),
       ]);
       if (!order) throw new Error("Commande PayDunya introuvable.");
-      if (payment.totalAmount !== order.total_amount || payment.orderNumber !== order.order_number || payment.currency !== "XOF") {
+      if (payment.totalAmount !== order.payment_total_amount || payment.orderNumber !== order.order_number || payment.currency !== order.payment_currency || order.payment_currency !== "XOF") {
         throw new Error("La facture PayDunya ne correspond pas à la commande.");
       }
       return { status: payment.status };

@@ -4,7 +4,8 @@ import Link from "next/link";
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import type { Order, OrderItem, OrderStatus } from "@/app/lib/orders";
-import { formatDualPrice, formatFcfaPrice, parsePrice } from "@/app/lib/prices";
+import { formatDualPrice, formatFcfaPrice } from "@/app/lib/prices";
+import { formatMoney, normalizeCurrency, SUPPORTED_CURRENCIES } from "@/app/lib/currency";
 import { generateClientId } from "@/app/lib/client-id";
 import type { Product } from "@/app/lib/products";
 import CampaignLinkGenerator from "./CampaignLinkGenerator";
@@ -19,6 +20,8 @@ type BulkProductRow = {
   name: string;
   color: string;
   price: string;
+  priceEur: string;
+  priceUsd: string;
   stock: string;
   description: string;
   error: string;
@@ -49,6 +52,9 @@ type BulkDeleteResult = {
 const emptyProduct: ProductForm = {
   name: "",
   price: "5 000 F",
+  priceXof: 5000,
+  priceEur: 800,
+  priceUsd: 900,
   description: "",
   brand: "King Of Caps",
   category: "Casquette",
@@ -63,9 +69,10 @@ const fieldClassName = "w-full rounded-xl border border-gray-300 bg-white px-4 p
 const fileInputClassName = "block w-full cursor-pointer rounded-xl border border-dashed border-gray-300 bg-white p-2.5 text-sm text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:font-bold file:text-black focus:border-[#c9a227] focus:ring-1 focus:ring-[#c9a227]";
 
 function setTextField<T extends ProductForm | Product>(form: T, name: string, value: string) {
+  const numericFields = new Set(["stockQuantity", "priceXof", "priceEur", "priceUsd"]);
   return {
     ...form,
-    [name]: name === "stockQuantity" ? Math.max(0, Number(value) || 0) : value,
+    [name]: numericFields.has(name) ? Math.max(0, Number(value) || 0) : value,
   } as T;
 }
 
@@ -106,8 +113,22 @@ function orderWhatsAppUrl(order: Order) {
   const number = order.customer_phone.replace(/\D/g, "");
   if (!number) return null;
   const phone = number.startsWith("229") ? number : `229${number}`;
-  const message = `Bonjour ${order.customer_first_name} ${order.customer_last_name}, nous vous contactons concernant votre commande ${order.order_number} de ${order.product_name}, quantité ${order.quantity}, total ${formatDualPrice(order.total_amount)}.`;
+  const message = `Bonjour ${order.customer_first_name} ${order.customer_last_name}, nous vous contactons concernant votre commande ${order.order_number} de ${order.product_name}, quantité ${order.quantity}, total ${formatMoney(order.total_amount, normalizeCurrency(order.currency))}.`;
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+}
+
+function formatOrderAmount(order: Order) {
+  return formatMoney(order.total_amount, normalizeCurrency(order.currency));
+}
+
+function formatOrdersTotal(orders: Order[]) {
+  const totals = new Map(SUPPORTED_CURRENCIES.map((currency) => [currency, 0]));
+  orders.forEach((order) => {
+    const currency = normalizeCurrency(order.currency);
+    totals.set(currency, (totals.get(currency) ?? 0) + order.total_amount);
+  });
+  return SUPPORTED_CURRENCIES.filter((currency) => (totals.get(currency) ?? 0) > 0)
+    .map((currency) => formatMoney(totals.get(currency) ?? 0, currency)).join(" · ") || formatMoney(0, "XOF");
 }
 
 type DisplayOrderItem = Pick<OrderItem, "id" | "product_name" | "product_image" | "quantity">;
@@ -198,8 +219,8 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     });
     return [...result].sort((first, second) => {
       if (productSort === "name_asc") return first.name.localeCompare(second.name, "fr");
-      if (productSort === "price_asc") return parsePrice(first.price) - parsePrice(second.price);
-      if (productSort === "price_desc") return parsePrice(second.price) - parsePrice(first.price);
+      if (productSort === "price_asc") return first.priceXof - second.priceXof;
+      if (productSort === "price_desc") return second.priceXof - first.priceXof;
       if (productSort === "stock_asc") return first.stockQuantity - second.stockQuantity;
       if (productSort === "stock_desc") return second.stockQuantity - first.stockQuantity;
       return Number(second.id) - Number(first.id);
@@ -220,8 +241,11 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     });
     return [...result].sort((first, second) => {
       if (ordersSort === "oldest") return new Date(first.created_at).getTime() - new Date(second.created_at).getTime();
-      if (ordersSort === "amount_asc") return first.total_amount - second.total_amount;
-      if (ordersSort === "amount_desc") return second.total_amount - first.total_amount;
+      if (ordersSort === "amount_asc" || ordersSort === "amount_desc") {
+        const currencyOrder = normalizeCurrency(first.currency).localeCompare(normalizeCurrency(second.currency));
+        if (currencyOrder !== 0) return currencyOrder;
+        return ordersSort === "amount_asc" ? first.total_amount - second.total_amount : second.total_amount - first.total_amount;
+      }
       return new Date(second.created_at).getTime() - new Date(first.created_at).getTime();
     });
   }, [orders, ordersDateFilter, ordersFilter, ordersSearch, ordersSort]);
@@ -243,19 +267,19 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
       const index = dayIndex.get(dayKey(order.created_at));
       if (index !== undefined) {
         days[index].orders += 1;
-        if (order.order_status !== "cancelled" && (order.payment_status === "paid" || (order.payment_method === "cash_on_delivery" && order.order_status === "delivered"))) days[index].revenue += order.total_amount;
+        if (order.order_status !== "cancelled" && normalizeCurrency(order.payment_currency) === "XOF" && (order.payment_status === "paid" || (order.payment_method === "cash_on_delivery" && order.order_status === "delivered"))) days[index].revenue += order.payment_total_amount;
       }
       if (order.order_status !== "cancelled") {
         const sale = sales.get(order.product_id) ?? { name: order.product_name, image: order.product_image, quantity: 0, revenue: 0 };
         sale.quantity += order.quantity;
-        sale.revenue += order.total_amount;
+        if (normalizeCurrency(order.payment_currency) === "XOF") sale.revenue += order.payment_total_amount;
         sales.set(order.product_id, sale);
       }
     });
 
     return {
-      totalRevenue: revenueOrders.reduce((total, order) => total + order.total_amount, 0),
-      revenueToday: revenueOrders.filter((order) => dayKey(order.created_at) === today).reduce((total, order) => total + order.total_amount, 0),
+      totalRevenue: formatOrdersTotal(revenueOrders),
+      revenueToday: formatOrdersTotal(revenueOrders.filter((order) => dayKey(order.created_at) === today)),
       ordersToday: orders.filter((order) => dayKey(order.created_at) === today).length,
       pendingOrders: orders.filter((order) => order.order_status === "new" || order.order_status === "pending" || order.order_status === "awaiting_payment").length,
       deliveredOrders: orders.filter((order) => order.order_status === "delivered").length,
@@ -415,6 +439,9 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
   function appendFormData(formData: FormData, product: ProductForm | Product, image: File | null, images: File[]) {
     formData.set("name", product.name);
     formData.set("price", product.price);
+    formData.set("priceXof", String(product.priceXof));
+    formData.set("priceEur", String(product.priceEur / 100));
+    formData.set("priceUsd", String(product.priceUsd / 100));
     formData.set("description", product.description);
     formData.set("brand", product.brand);
     formData.set("category", product.category);
@@ -473,6 +500,8 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
         name: "",
         color: "",
         price: "5000",
+        priceEur: "8",
+        priceUsd: "9",
         stock: "1",
         description: "",
         error: "",
@@ -484,7 +513,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     setMessage((event.target.files?.length ?? 0) > 10 ? "Seules les 10 premières images ont été retenues." : "");
   }
 
-  function updateBulkProduct(id: string, updates: Partial<Pick<BulkProductRow, "name" | "color" | "price" | "stock" | "description">>) {
+  function updateBulkProduct(id: string, updates: Partial<Pick<BulkProductRow, "name" | "color" | "price" | "priceEur" | "priceUsd" | "stock" | "description">>) {
     setBulkRows((current) => current.map((row) => row.id === id ? { ...row, ...updates, error: "" } : row));
   }
 
@@ -580,7 +609,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     }
     const invalidRows = new Set(bulkRows.filter((row) => {
       const stock = Number(row.stock);
-      return !row.name.trim() || !row.price.trim() || !row.stock.trim() || !Number.isFinite(stock) || stock < 0;
+      return !row.name.trim() || !row.price.trim() || !row.priceEur.trim() || !row.priceUsd.trim() || !row.stock.trim() || !Number.isFinite(stock) || stock < 0;
     }).map((row) => row.id));
     if (invalidRows.size > 0) {
       setBulkRows((current) => current.map((row) => invalidRows.has(row.id)
@@ -607,6 +636,9 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
             name: row.name,
             color: row.color,
             price: row.price,
+            priceXof: Math.max(1, Math.round(Number(row.price))),
+            priceEur: Math.max(1, Math.round(Number(row.priceEur) * 100)),
+            priceUsd: Math.max(1, Math.round(Number(row.priceUsd) * 100)),
             stockQuantity: Math.max(0, Math.floor(Number(row.stock))),
             description: row.description,
           },
@@ -656,6 +688,9 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
           body: JSON.stringify({
             name: editing.name,
             price: editing.price,
+            priceXof: editing.priceXof,
+            priceEur: editing.priceEur,
+            priceUsd: editing.priceUsd,
             description: editing.description,
             brand: editing.brand,
             category: editing.category,
@@ -926,8 +961,8 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
               <DashboardStat label="Produits en rupture" value={dashboard.outOfStock.length} tone="red" />
               <DashboardStat label="Total commandes" value={orders.length} />
               <DashboardStat label="Commandes aujourd’hui" value={dashboard.ordersToday} tone="gold" />
-              <DashboardStat label="Chiffre d’affaires aujourd’hui" value={formatDualPrice(dashboard.revenueToday)} tone="gold" />
-              <DashboardStat label="Chiffre d’affaires total" value={formatDualPrice(dashboard.totalRevenue)} tone="gold" />
+              <DashboardStat label="Chiffre d’affaires aujourd’hui" value={dashboard.revenueToday} tone="gold" />
+              <DashboardStat label="Chiffre d’affaires total" value={dashboard.totalRevenue} tone="gold" />
               <DashboardStat label="Commandes en attente" value={dashboard.pendingOrders} tone="blue" />
               <DashboardStat label="Commandes livrées" value={dashboard.deliveredOrders} tone="green" />
               <DashboardStat label="Commandes annulées" value={dashboard.cancelledOrders} tone="red" />
@@ -937,7 +972,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
           <CampaignLinkGenerator products={products.map(({ id, name }) => ({ id, name }))} />
 
           <section className="grid gap-5 xl:grid-cols-3">
-            <DashboardChart title="Revenus — 30 derniers jours" values={dashboard.days.map((day) => day.revenue)} labels={dashboard.days.map((day) => day.label)} valueFormatter={formatDualPrice} />
+            <DashboardChart title="Règlements XOF — 30 derniers jours" values={dashboard.days.map((day) => day.revenue)} labels={dashboard.days.map((day) => day.label)} valueFormatter={(value) => formatMoney(value, "XOF")} />
             <DashboardChart title="Commandes — 30 derniers jours" values={dashboard.days.map((day) => day.orders)} labels={dashboard.days.map((day) => day.label)} valueFormatter={(value) => `${value} commande${value > 1 ? "s" : ""}`} />
             <section className="rounded-2xl border border-[#e5e5e5] bg-white p-5 shadow-sm"><h3 className="font-black">Produits les plus vendus</h3><div className="mt-5 space-y-3">{dashboard.bestSelling.length > 0 ? dashboard.bestSelling.map((product, index) => <div key={`${product.name}-${index}`} className="flex items-center gap-3 rounded-xl bg-[#fafafa] p-3"><div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-zinc-100"><ProductImage src={product.image} alt="" fill sizes="40px" className="object-cover" /></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-zinc-800">{index + 1}. {product.name}</p><p className="mt-0.5 text-xs font-semibold text-zinc-500">{product.quantity} vendue{product.quantity > 1 ? "s" : ""}</p></div><span className="shrink-0 text-sm font-black text-[#c9a227]">{formatDualPrice(product.revenue)}</span></div>) : <p className="text-sm text-zinc-500">Aucune vente enregistrée.</p>}</div><div className="mt-5 border-t border-[#e5e5e5] pt-4"><p className="text-sm font-bold text-zinc-800">Produits les plus vus</p><p className="mt-1 text-sm text-zinc-500">Données de vues indisponibles.</p></div></section>
           </section>
@@ -947,7 +982,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
             <StockAlert title="Rupture de stock" description="Ces produits ne peuvent plus être commandés en ligne." products={dashboard.outOfStock} tone="red" />
           </section>
 
-          <section className="rounded-2xl border border-[#e5e5e5] bg-white p-5 shadow-sm"><div className="flex items-center justify-between gap-4"><div><p className="text-sm font-bold tracking-[0.2em] text-[#c9a227]">COMMANDES RÉCENTES</p><h3 className="mt-2 text-2xl font-black">Les 10 dernières commandes</h3></div><Link href="/admin/orders" className="text-sm font-bold text-[#a8861e] hover:text-black">Voir toutes →</Link></div><div className="mt-5 overflow-x-auto"><table className="min-w-[860px] w-full text-left text-sm"><thead className="border-b border-[#e5e5e5] text-xs uppercase tracking-wide text-zinc-500"><tr><th className="px-3 py-3">Commande</th><th className="px-3 py-3">Client</th><th className="px-3 py-3">Produit</th><th className="px-3 py-3">Qté</th><th className="px-3 py-3">Total</th><th className="px-3 py-3">Paiement</th><th className="px-3 py-3">Statut</th><th className="px-3 py-3">Date</th></tr></thead><tbody>{dashboard.recentOrders.map((order) => <tr key={order.id} className="border-b border-[#f0f0f0] last:border-0"><td className="px-3 py-3 font-bold text-[#a8861e]">{order.order_number}</td><td className="px-3 py-3 text-zinc-700">{order.customer_first_name} {order.customer_last_name}</td><td className="max-w-48 truncate px-3 py-3 font-semibold text-zinc-800">{order.product_name}</td><td className="px-3 py-3 text-zinc-700">{order.quantity}</td><td className="px-3 py-3 font-bold text-[#a8861e]">{formatDualPrice(order.total_amount)}</td><td className="px-3 py-3 text-zinc-700">{paymentMethodLabel(order.payment_method)}</td><td className="px-3 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${orderStatusClassNames[order.order_status]}`}>{orderStatusLabels[order.order_status]}</span></td><td className="px-3 py-3 text-zinc-500">{new Date(order.created_at).toLocaleDateString("fr-FR")}</td></tr>)}{dashboard.recentOrders.length === 0 && <tr><td colSpan={8} className="px-3 py-8 text-center text-zinc-500">Aucune commande récente.</td></tr>}</tbody></table></div></section>
+          <section className="rounded-2xl border border-[#e5e5e5] bg-white p-5 shadow-sm"><div className="flex items-center justify-between gap-4"><div><p className="text-sm font-bold tracking-[0.2em] text-[#c9a227]">COMMANDES RÉCENTES</p><h3 className="mt-2 text-2xl font-black">Les 10 dernières commandes</h3></div><Link href="/admin/orders" className="text-sm font-bold text-[#a8861e] hover:text-black">Voir toutes →</Link></div><div className="mt-5 overflow-x-auto"><table className="min-w-[860px] w-full text-left text-sm"><thead className="border-b border-[#e5e5e5] text-xs uppercase tracking-wide text-zinc-500"><tr><th className="px-3 py-3">Commande</th><th className="px-3 py-3">Client</th><th className="px-3 py-3">Produit</th><th className="px-3 py-3">Qté</th><th className="px-3 py-3">Total</th><th className="px-3 py-3">Paiement</th><th className="px-3 py-3">Statut</th><th className="px-3 py-3">Date</th></tr></thead><tbody>{dashboard.recentOrders.map((order) => <tr key={order.id} className="border-b border-[#f0f0f0] last:border-0"><td className="px-3 py-3 font-bold text-[#a8861e]">{order.order_number}</td><td className="px-3 py-3 text-zinc-700">{order.customer_first_name} {order.customer_last_name}</td><td className="max-w-48 truncate px-3 py-3 font-semibold text-zinc-800">{order.product_name}</td><td className="px-3 py-3 text-zinc-700">{order.quantity}</td><td className="px-3 py-3 font-bold text-[#a8861e]">{formatOrderAmount(order)}</td><td className="px-3 py-3 text-zinc-700">{paymentMethodLabel(order.payment_method)}</td><td className="px-3 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${orderStatusClassNames[order.order_status]}`}>{orderStatusLabels[order.order_status]}</span></td><td className="px-3 py-3 text-zinc-500">{new Date(order.created_at).toLocaleDateString("fr-FR")}</td></tr>)}{dashboard.recentOrders.length === 0 && <tr><td colSpan={8} className="px-3 py-8 text-center text-zinc-500">Aucune commande récente.</td></tr>}</tbody></table></div></section>
       </div>}
 
       {view === "products" && <div className="space-y-10">
@@ -1000,6 +1035,8 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
                     <Field label={`Nom du produit ${index + 1} *`}><input value={row.name} onChange={(event) => updateBulkProduct(row.id, { name: event.target.value })} required className={fieldClassName} /></Field>
                     <Field label="Couleur"><input value={row.color} onChange={(event) => updateBulkProduct(row.id, { color: event.target.value })} className={fieldClassName} /></Field>
                     <Field label="Prix (F) *"><input value={row.price} onChange={(event) => updateBulkProduct(row.id, { price: event.target.value })} required className={fieldClassName} /></Field>
+                    <Field label="Prix EUR *"><input type="number" min="0.01" step="0.01" value={row.priceEur} onChange={(event) => updateBulkProduct(row.id, { priceEur: event.target.value })} required className={fieldClassName} /></Field>
+                    <Field label="Prix USD *"><input type="number" min="0.01" step="0.01" value={row.priceUsd} onChange={(event) => updateBulkProduct(row.id, { priceUsd: event.target.value })} required className={fieldClassName} /></Field>
                     <Field label="Stock"><input type="number" min="0" value={row.stock} onChange={(event) => updateBulkProduct(row.id, { stock: event.target.value })} required className={fieldClassName} /></Field>
                     <Field label="Description"><textarea value={row.description} onChange={(event) => updateBulkProduct(row.id, { description: event.target.value })} rows={2} className={`${fieldClassName} resize-y`} /></Field>
                     <button type="button" onClick={() => removeBulkProduct(row.id)} className="rounded-xl border border-red-200 px-4 py-3 text-sm font-bold text-red-600 hover:bg-red-50 lg:col-start-5">Supprimer cette ligne</button>
@@ -1060,7 +1097,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <h3 className="font-bold">{product.name}</h3>
-                        <p className="mt-1 font-black leading-tight text-[#c9a227]">{formatDualPrice(product.price)}</p>
+                        <p className="mt-1 text-sm font-black leading-tight text-[#c9a227]">{formatMoney(product.priceXof, "XOF")}<span className="mt-1 block text-xs text-zinc-500">{formatMoney(product.priceEur, "EUR")} · {formatMoney(product.priceUsd, "USD")}</span></p>
                       </div>
                       <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${stockColorClassName(product.stockQuantity)}`}>
                         {product.stockQuantity === 0 ? "Rupture de stock" : product.stockQuantity <= 10 ? "Stock faible" : "En stock"}
@@ -1171,7 +1208,7 @@ function OrderCard({ order, isUpdating, isExpanded, onStatusChange, onToggleDeta
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
         <div>
           <p className="text-xs font-bold tracking-wide text-[#c9a227]">{order.order_number}</p>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1"><h3 className="font-black">{orderItems.length} article{orderItems.length > 1 ? "s" : ""}</h3><span className="text-sm font-bold text-[#c9a227]">{formatDualPrice(order.total_amount)}</span></div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1"><h3 className="font-black">{orderItems.length} article{orderItems.length > 1 ? "s" : ""}</h3><span className="text-sm font-bold text-[#c9a227]">{formatOrderAmount(order)}</span></div>
           <p className="mt-1 text-sm text-zinc-700">{order.customer_first_name} {order.customer_last_name} · {order.customer_phone}</p>
           <p className="mt-1 text-sm text-zinc-500">{totalQuantity} unité(s) · {paymentMethodLabel(order.payment_method)} · {new Date(order.created_at).toLocaleDateString("fr-FR")}</p>
           <OrderItemsList items={orderItems} />
@@ -1189,7 +1226,7 @@ function OrderCard({ order, isUpdating, isExpanded, onStatusChange, onToggleDeta
           <h4 id={`ordered-items-${order.id}`} className="text-sm font-black text-black">Articles commandés</h4>
           <OrderItemsList items={orderItems} detailed />
         </section>
-        <dl className="mt-4 grid gap-3 border-t border-[#e5e5e5] pt-4 text-sm sm:grid-cols-2"><OrderDetail label="Client" value={`${order.customer_first_name} ${order.customer_last_name}`} /><OrderDetail label="Téléphone" value={order.customer_phone} /><OrderDetail label="E-mail" value={order.customer_email || "Non renseigné"} /><OrderDetail label="Adresse" value={order.customer_address} /><OrderDetail label="Ville ou quartier" value={order.customer_city} /><OrderDetail label="Informations complémentaires" value={order.customer_note || "Aucune"} /><OrderDetail label="Total" value={formatDualPrice(order.total_amount)} /><OrderDetail label="Paiement" value={paymentMethodLabel(order.payment_method)} /><OrderDetail label="Statut du paiement" value={paymentStatusLabels[order.payment_status]} /><OrderDetail label="Statut de la commande" value={orderStatusLabels[order.order_status]} /><OrderDetail label="Date" value={new Date(order.created_at).toLocaleString("fr-FR")} /></dl>
+        <dl className="mt-4 grid gap-3 border-t border-[#e5e5e5] pt-4 text-sm sm:grid-cols-2"><OrderDetail label="Client" value={`${order.customer_first_name} ${order.customer_last_name}`} /><OrderDetail label="Téléphone" value={order.customer_phone} /><OrderDetail label="E-mail" value={order.customer_email || "Non renseigné"} /><OrderDetail label="Adresse" value={order.customer_address} /><OrderDetail label="Ville ou quartier" value={order.customer_city} /><OrderDetail label="Informations complémentaires" value={order.customer_note || "Aucune"} /><OrderDetail label="Total" value={formatOrderAmount(order)} /><OrderDetail label="Devise" value={normalizeCurrency(order.currency)} /><OrderDetail label="Paiement" value={paymentMethodLabel(order.payment_method)} /><OrderDetail label="Statut du paiement" value={paymentStatusLabels[order.payment_status]} /><OrderDetail label="Statut de la commande" value={orderStatusLabels[order.order_status]} /><OrderDetail label="Date" value={new Date(order.created_at).toLocaleString("fr-FR")} /></dl>
       </div>}
     </article>
   );
@@ -1291,7 +1328,9 @@ function ProductEditor({
           <Field label="Marque"><input name="brand" value={form.brand} onChange={(event) => onTextChange("brand", event.target.value)} className={fieldClassName} /></Field>
           <Field label="Catégorie"><input name="category" value={form.category} onChange={(event) => onTextChange("category", event.target.value)} className={fieldClassName} /></Field>
           <Field label="Couleur"><input name="color" value={form.color} onChange={(event) => onTextChange("color", event.target.value)} className={fieldClassName} /></Field>
-          <Field label="Prix (F) *"><input name="price" value={form.price} onChange={(event) => onTextChange("price", event.target.value)} required className={fieldClassName} /></Field>
+          <Field label="Prix XOF *"><input type="number" min="1" name="priceXof" value={form.priceXof} onChange={(event) => onTextChange("priceXof", event.target.value)} required className={fieldClassName} /></Field>
+          <Field label="Prix EUR (centimes) *"><input type="number" min="1" name="priceEur" value={form.priceEur} onChange={(event) => onTextChange("priceEur", event.target.value)} required className={fieldClassName} /></Field>
+          <Field label="Prix USD (cents) *"><input type="number" min="1" name="priceUsd" value={form.priceUsd} onChange={(event) => onTextChange("priceUsd", event.target.value)} required className={fieldClassName} /></Field>
           <Field label="Quantité en stock"><input type="number" min="0" name="stockQuantity" value={form.stockQuantity} onChange={(event) => onTextChange("stockQuantity", event.target.value)} className={fieldClassName} /></Field>
         </div>
       </FormSection>

@@ -1,4 +1,5 @@
 import type { PaymentMethod } from "./orders";
+import { formatMoney, type Currency } from "./currency.ts";
 
 export const PAYMENT_OPTIONS: Array<{
   value: PaymentMethod;
@@ -15,8 +16,8 @@ export function paymentMethodLabel(method: PaymentMethod) {
   return PAYMENT_OPTIONS.find((option) => option.value === method)?.title ?? "Paiement";
 }
 
-export function checkoutButtonLabel(method: PaymentMethod, total: number) {
+export function checkoutButtonLabel(method: PaymentMethod, total: number, currency: Currency) {
   return method === "cash_on_delivery"
     ? "Confirmer la commande"
-    : `Payer ${new Intl.NumberFormat("fr-FR").format(total)} F`;
+    : `Payer ${formatMoney(total, currency)}`;
 }

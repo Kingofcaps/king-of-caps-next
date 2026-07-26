@@ -1,13 +1,14 @@
 import { normalizeProductImageUrl } from "./product-image-url.ts";
+import { getProductPrice, type Currency, type ProductPrices } from "./currency.ts";
 
-export const CART_STORAGE_KEY = "king-of-caps-cart-v1";
+export const CART_STORAGE_KEY = "king-of-caps-cart-v2";
+export const LEGACY_CART_STORAGE_KEY = "king-of-caps-cart-v1";
 export const PENDING_CART_ORDER_KEY = "king-of-caps-pending-cart-order";
 
-export type CartItem = {
+export type CartItem = ProductPrices & {
   productId: string;
   name: string;
   image: string;
-  unitPrice: number;
   quantity: number;
   stockQuantity: number;
 };
@@ -27,9 +28,12 @@ export function sanitizeCart(value: unknown): CartItem[] {
     const productId = typeof raw.productId === "string" ? raw.productId.trim() : "";
     const name = typeof raw.name === "string" ? raw.name.trim() : "";
     const image = normalizeProductImageUrl(typeof raw.image === "string" ? raw.image : null);
-    const unitPrice = positiveInteger(raw.unitPrice);
+    const legacyPrice = positiveInteger((raw as Partial<CartItem> & { unitPrice?: number }).unitPrice);
+    const priceXof = positiveInteger(raw.priceXof) || legacyPrice;
+    const priceEur = positiveInteger(raw.priceEur) || Math.round(priceXof / 655.957) * 100;
+    const priceUsd = positiveInteger(raw.priceUsd) || Math.round(priceXof / 555.5555555556) * 100;
     const stockQuantity = positiveInteger(raw.stockQuantity);
-    if (!productId || !name || !image || unitPrice < 1 || stockQuantity < 1) continue;
+    if (!productId || !name || !image || priceXof < 1 || priceEur < 1 || priceUsd < 1 || stockQuantity < 1) continue;
 
     const quantity = Math.min(Math.max(1, positiveInteger(raw.quantity)), stockQuantity);
     const existing = items.get(productId);
@@ -37,7 +41,9 @@ export function sanitizeCart(value: unknown): CartItem[] {
       productId,
       name,
       image,
-      unitPrice,
+      priceXof,
+      priceEur,
+      priceUsd,
       stockQuantity,
       quantity: Math.min((existing?.quantity ?? 0) + quantity, stockQuantity),
     });
@@ -74,6 +80,6 @@ export function cartItemCount(items: CartItem[]) {
   return items.reduce((total, item) => total + item.quantity, 0);
 }
 
-export function cartSubtotal(items: CartItem[]) {
-  return items.reduce((total, item) => total + item.unitPrice * item.quantity, 0);
+export function cartSubtotal(items: CartItem[], currency: Currency) {
+  return items.reduce((total, item) => total + getProductPrice(item, currency) * item.quantity, 0);
 }

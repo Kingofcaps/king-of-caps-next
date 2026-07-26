@@ -1,6 +1,6 @@
 import { Resend } from "resend";
 import type { Order } from "@/app/lib/orders";
-import { formatDualPrice } from "@/app/lib/prices";
+import { formatMoney, normalizeCurrency } from "@/app/lib/currency";
 import { isValidEmail } from "@/app/lib/validation";
 
 const EMAIL_FROM = "KING OF CAPS <command@kingofcaps.bj>";
@@ -46,9 +46,9 @@ function getNotificationConfig() {
 
 function orderItemLines(order: Order) {
   if (!order.order_items?.length) {
-    return [`${order.product_name} × ${order.quantity} — ${formatDualPrice(order.total_amount)}`];
+    return [`${order.product_name} × ${order.quantity} — ${formatMoney(order.total_amount, normalizeCurrency(order.currency))}`];
   }
-  return order.order_items.map((item) => `${item.product_name} × ${item.quantity} — ${formatDualPrice(item.line_total)}`);
+  return order.order_items.map((item) => `${item.product_name} × ${item.quantity} — ${formatMoney(item.line_total, normalizeCurrency(item.currency, normalizeCurrency(order.currency)))}`);
 }
 
 function orderItemsHtml(order: Order) {
@@ -84,10 +84,10 @@ export async function notifyNewOrder(order: Order) {
         `Ville ou arrondissement : ${order.customer_city}`,
         "Articles :",
         ...orderItemLines(order).map((line) => `- ${line}`),
-        `Total : ${formatDualPrice(order.total_amount)}`,
+        `Total : ${formatMoney(order.total_amount, normalizeCurrency(order.currency))}`,
         `Paiement : ${paymentMethodLabel(order.payment_method)}`,
       ].join("\n"),
-      html: `<h1>Nouvelle commande ${escapeHtml(order.order_number)}</h1><p><strong>Client :</strong> ${escapeHtml(customerName)}</p><p><strong>Téléphone :</strong> ${escapeHtml(order.customer_phone)}</p><p><strong>Adresse :</strong> ${escapeHtml(order.customer_address)}</p><p><strong>Ville ou arrondissement :</strong> ${escapeHtml(order.customer_city)}</p><p><strong>Articles :</strong></p><ul>${orderItemsHtml(order)}</ul><p><strong>Total :</strong> ${escapeHtml(formatDualPrice(order.total_amount))}</p><p><strong>Paiement :</strong> ${escapeHtml(paymentMethodLabel(order.payment_method))}</p>`,
+      html: `<h1>Nouvelle commande ${escapeHtml(order.order_number)}</h1><p><strong>Client :</strong> ${escapeHtml(customerName)}</p><p><strong>Téléphone :</strong> ${escapeHtml(order.customer_phone)}</p><p><strong>Adresse :</strong> ${escapeHtml(order.customer_address)}</p><p><strong>Ville ou arrondissement :</strong> ${escapeHtml(order.customer_city)}</p><p><strong>Articles :</strong></p><ul>${orderItemsHtml(order)}</ul><p><strong>Total :</strong> ${escapeHtml(formatMoney(order.total_amount, normalizeCurrency(order.currency)))}</p><p><strong>Paiement :</strong> ${escapeHtml(paymentMethodLabel(order.payment_method))}</p>`,
     },
     { idempotencyKey: `admin-order-${order.id}` },
   );
@@ -127,7 +127,7 @@ function customerEmailText(order: Order) {
     `Numéro de commande : ${order.order_number}`,
     "Articles :",
     ...orderItemLines(order).map((line) => `- ${line}`),
-    `Total : ${formatDualPrice(order.total_amount)}`,
+    `Total : ${formatMoney(order.total_amount, normalizeCurrency(order.currency))}`,
     `Mode de paiement : ${paymentMethodLabel(order.payment_method)}`,
     `Statut du paiement : ${paymentStatusLabel(order.payment_status)}`,
     `Adresse de livraison : ${order.customer_address}`,
@@ -145,7 +145,7 @@ function customerEmailText(order: Order) {
 function customerEmailHtml(order: Order) {
   const customerName = escapeHtml(order.customer_first_name.trim() || order.customer_last_name.trim());
   const orderNumber = escapeHtml(order.order_number);
-  const total = escapeHtml(formatDualPrice(order.total_amount));
+  const total = escapeHtml(formatMoney(order.total_amount, normalizeCurrency(order.currency)));
   const paymentMethod = escapeHtml(paymentMethodLabel(order.payment_method));
   const paymentStatus = escapeHtml(paymentStatusLabel(order.payment_status));
   const address = escapeHtml(order.customer_address);

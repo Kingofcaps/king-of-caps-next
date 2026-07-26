@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useMemo, useSyncExternalStore } from "react";
 import {
   CART_STORAGE_KEY,
+  LEGACY_CART_STORAGE_KEY,
   addCartItem,
   cartItemCount,
   removeCartItem,
@@ -39,7 +40,18 @@ function subscribeToCart(callback: () => void) {
 }
 
 function getCartSnapshot() {
-  return window.localStorage.getItem(CART_STORAGE_KEY) ?? EMPTY_CART_SNAPSHOT;
+  const current = window.localStorage.getItem(CART_STORAGE_KEY);
+  if (current) return current;
+  const legacy = window.localStorage.getItem(LEGACY_CART_STORAGE_KEY);
+  if (!legacy) return EMPTY_CART_SNAPSHOT;
+  try {
+    const migrated = JSON.stringify(sanitizeCart(JSON.parse(legacy)));
+    window.localStorage.setItem(CART_STORAGE_KEY, migrated);
+    window.localStorage.removeItem(LEGACY_CART_STORAGE_KEY);
+    return migrated;
+  } catch {
+    return EMPTY_CART_SNAPSHOT;
+  }
 }
 
 function getServerCartSnapshot() {

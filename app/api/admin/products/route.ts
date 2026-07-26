@@ -26,6 +26,11 @@ function getQuantity(formData: FormData) {
   return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 }
 
+function getMoney(formData: FormData, key: string) {
+  const value = Number(getText(formData, key).replace(",", "."));
+  return Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
 export async function GET() {
   if (!(await isAuthorized())) return unauthorized();
   return NextResponse.json(await getProducts());
@@ -39,14 +44,17 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const name = getText(formData, "name");
     const price = getText(formData, "price");
+    const priceXof = Math.round(getMoney(formData, "priceXof") || Number(price.replace(/[^0-9]/g, "")));
+    const priceEur = Math.round(getMoney(formData, "priceEur") * 100);
+    const priceUsd = Math.round(getMoney(formData, "priceUsd") * 100);
     const description = getText(formData, "description");
     const primaryFile = formData.get("image");
     const additionalFiles = formData
       .getAll("images")
       .filter((file): file is File => file instanceof File && file.size > 0);
 
-    if (!name || !price) {
-      return NextResponse.json({ error: "Le nom et le prix sont obligatoires." }, { status: 400 });
+    if (!name || !Number.isFinite(priceXof) || priceXof < 1 || priceEur < 1 || priceUsd < 1) {
+      return NextResponse.json({ error: "Le nom et les trois prix sont obligatoires." }, { status: 400 });
     }
     if (!(primaryFile instanceof File) || primaryFile.size === 0) {
       return NextResponse.json({ error: "Veuillez sélectionner une image principale." }, { status: 400 });
@@ -76,6 +84,9 @@ export async function POST(request: Request) {
       id: productId,
       name,
       price,
+      priceXof,
+      priceEur,
+      priceUsd,
       description,
       image,
       images: Array.from(new Set([image, ...uploadedImages])).slice(0, 6),

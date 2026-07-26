@@ -5,6 +5,9 @@ export type Product = {
   id: string;
   name: string;
   price: string;
+  priceXof: number;
+  priceEur: number;
+  priceUsd: number;
   description: string;
   image: string;
   images: string[];
@@ -24,6 +27,9 @@ type ProductRecord = {
   id: string;
   name: string;
   price: string;
+  price_xof?: number | null;
+  price_eur?: number | null;
+  price_usd?: number | null;
   description: string;
   image: unknown;
   image_url?: unknown;
@@ -114,10 +120,18 @@ function toProduct(record: ProductRecord): Product {
     });
   }
 
+  const legacyXof = Number(String(record.price ?? "").replace(/[^0-9]/g, "")) || 0;
+  const priceXof = Math.max(0, Math.round(Number(record.price_xof) || legacyXof));
+  const priceEur = Math.max(0, Math.round(Number(record.price_eur) || Math.round(priceXof / 655.957) * 100));
+  const priceUsd = Math.max(0, Math.round(Number(record.price_usd) || Math.round(priceXof / 555.5555555556) * 100));
+
   return {
     id: record.id,
     name: record.name,
-    price: formatFcfaPrice(record.price),
+    price: formatFcfaPrice(priceXof),
+    priceXof,
+    priceEur,
+    priceUsd,
     description: record.description,
     image: normalizedImage,
     images: normalizeImages(record.images, normalizedImage),
@@ -139,7 +153,10 @@ function toRecord(product: Product): ProductRecord {
   return {
     id: product.id,
     name: product.name,
-    price: product.price,
+    price: formatFcfaPrice(product.priceXof),
+    price_xof: Math.max(0, Math.round(product.priceXof)),
+    price_eur: Math.max(0, Math.round(product.priceEur)),
+    price_usd: Math.max(0, Math.round(product.priceUsd)),
     description: product.description,
     image: product.image,
     images: normalizeImages(product.images, product.image),

@@ -9,7 +9,9 @@ import { PENDING_CART_ORDER_KEY, cartItemCount, cartSubtotal, type CartItem } fr
 import { checkoutButtonLabel, paymentMethodLabel, PAYMENT_OPTIONS } from "@/app/lib/checkout";
 import { generateCheckoutId } from "@/app/lib/client-id";
 import type { PaymentMethod } from "@/app/lib/orders";
-import { formatDualPrice } from "@/app/lib/prices";
+import { formatMoney, getProductPrice } from "@/app/lib/currency";
+import { useCurrency } from "@/app/components/CurrencyProvider";
+import CurrencySelector from "@/app/components/CurrencySelector";
 import { isValidEmail } from "@/app/lib/validation";
 import ProductImage from "@/app/components/ProductImage";
 
@@ -25,6 +27,7 @@ export default function CheckoutForm({
 }) {
   const router = useRouter();
   const cart = useCart();
+  const { currency } = useCurrency();
   const items = useMemo(() => source === "cart" ? cart.items : (initialItems ?? []), [cart.items, initialItems, source]);
   const ready = source === "direct" || cart.hydrated;
   const submissionStarted = useRef(false);
@@ -41,7 +44,8 @@ export default function CheckoutForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const subtotal = useMemo(() => cartSubtotal(items), [items]);
+  const subtotal = useMemo(() => cartSubtotal(items, currency), [items, currency]);
+  const payDunyaTotalXof = useMemo(() => cartSubtotal(items, "XOF"), [items]);
   const deliveryFee = 0;
   const total = subtotal + deliveryFee;
   const onlinePaymentUnavailable = !onlinePaymentsEnabled && paymentMethod !== "cash_on_delivery";
@@ -76,6 +80,7 @@ export default function CheckoutForm({
           city: city.trim(),
           note: note.trim(),
           paymentMethod,
+          currency,
         }),
       });
       const result = (await response.json()) as { success?: boolean; orderNumber?: string; checkoutUrl?: string; error?: string };
@@ -105,7 +110,7 @@ export default function CheckoutForm({
 
   return (
     <main className="min-h-screen bg-[#fafafa] text-zinc-900">
-      <header className="border-b border-[#e5e5e5] bg-white"><div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5 sm:px-8"><Link href="/" className="text-sm font-bold tracking-[0.22em]">KING OF CAPS</Link><Link href={source === "cart" ? "/panier" : "/"} className="text-sm font-semibold text-zinc-600">Retour</Link></div></header>
+      <header className="border-b border-[#e5e5e5] bg-white"><div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5 sm:px-8"><Link href="/" className="text-sm font-bold tracking-[0.22em]">KING OF CAPS</Link><div className="flex items-center gap-3"><CurrencySelector /><Link href={source === "cart" ? "/panier" : "/"} className="text-sm font-semibold text-zinc-600">Retour</Link></div></div></header>
       <div className="mx-auto grid max-w-6xl gap-8 px-5 py-8 sm:px-8 sm:py-12 lg:grid-cols-[1.05fr_0.95fr]">
         <section className="order-2 space-y-6 lg:order-1">
           <div><p className="text-sm font-bold tracking-[0.22em] text-[#a8861e]">CHECKOUT SÉCURISÉ</p><h1 className="mt-2 text-3xl font-black sm:text-4xl">Finaliser la commande</h1></div>
@@ -113,11 +118,12 @@ export default function CheckoutForm({
           <CheckoutCard title="Livraison"><Input label="Adresse *" value={address} onChange={setAddress} /><div className="mt-4"><Input label="Ville ou arrondissement *" value={city} onChange={setCity} /></div><label className="mt-4 block text-sm font-bold"><span className="mb-2 block">Informations complémentaires</span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-[#c9a227]" /></label></CheckoutCard>
           <CheckoutCard title="Paiement"><button type="button" onClick={() => setPaymentSheetOpen(true)} className="flex w-full items-center justify-between rounded-xl border-2 border-[#c9a227] bg-white px-4 py-4 text-left"><span><span className="block text-xs font-bold uppercase tracking-wider text-zinc-500">Moyen sélectionné</span><span className="mt-1 block font-black">{paymentMethodLabel(paymentMethod)}</span></span><span className="text-sm font-black text-[#8a6b13]">Choisir un moyen de paiement</span></button></CheckoutCard>
           {onlinePaymentUnavailable && <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">{ONLINE_PAYMENT_UNAVAILABLE_MESSAGE}</p>}
+          {paymentMethod !== "cash_on_delivery" && currency !== "XOF" && <p className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950">Prix de la commande : {formatMoney(total, currency)}. PayDunya effectuera le règlement en FCFA pour un montant exact de {formatMoney(payDunyaTotalXof, "XOF")}. Votre banque ou opérateur appliquera son propre taux de change.</p>}
           {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p>}
-          <button type="button" onClick={handleOrder} disabled={loading || items.length === 0 || onlinePaymentUnavailable} className="w-full rounded-2xl bg-black px-5 py-4 text-lg font-black text-white shadow-lg transition hover:bg-[#c9a227] disabled:cursor-not-allowed disabled:opacity-50">{loading ? "Traitement en cours…" : checkoutButtonLabel(paymentMethod, total)}</button>
+          <button type="button" onClick={handleOrder} disabled={loading || items.length === 0 || onlinePaymentUnavailable} className="w-full rounded-2xl bg-black px-5 py-4 text-lg font-black text-white shadow-lg transition hover:bg-[#c9a227] disabled:cursor-not-allowed disabled:opacity-50">{loading ? "Traitement en cours…" : checkoutButtonLabel(paymentMethod, paymentMethod === "cash_on_delivery" ? total : (currency === "XOF" ? total : payDunyaTotalXof), paymentMethod === "cash_on_delivery" ? currency : "XOF")}</button>
         </section>
 
-        <aside className="order-1 h-fit rounded-3xl border border-[#e5e5e5] bg-white p-5 shadow-xl shadow-zinc-200/50 lg:sticky lg:top-6"><p className="text-sm font-bold tracking-[0.18em] text-[#a8861e]">RÉSUMÉ · {cartItemCount(items)} ARTICLE{cartItemCount(items) > 1 ? "S" : ""}</p><div className="mt-5 max-h-[440px] space-y-4 overflow-y-auto pr-1">{items.map((item) => <div key={item.productId} className="flex gap-3 border-b border-zinc-100 pb-4 last:border-0"><div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-zinc-100"><ProductImage src={item.image} alt={item.name} fill sizes="80px" className="object-cover" /></div><div className="min-w-0 flex-1"><p className="line-clamp-2 font-black">{item.name}</p><p className="mt-1 text-xs text-zinc-500">{formatDualPrice(item.unitPrice)} × {item.quantity}</p><p className="mt-1 font-bold text-[#a8861e]">{formatDualPrice(item.unitPrice * item.quantity)}</p></div></div>)}</div><dl className="mt-5 space-y-3 border-t border-zinc-200 pt-5 text-sm"><div className="flex justify-between"><dt>Sous-total</dt><dd className="font-bold">{formatDualPrice(subtotal)}</dd></div><div className="flex justify-between"><dt>Frais de livraison</dt><dd className="font-bold">{formatDualPrice(deliveryFee)}</dd></div><div className="flex justify-between border-t border-zinc-200 pt-4 text-lg font-black"><dt>Total final</dt><dd className="text-[#a8861e]">{formatDualPrice(total)}</dd></div></dl></aside>
+        <aside className="order-1 h-fit rounded-3xl border border-[#e5e5e5] bg-white p-5 shadow-xl shadow-zinc-200/50 lg:sticky lg:top-6"><p className="text-sm font-bold tracking-[0.18em] text-[#a8861e]">RÉSUMÉ · {cartItemCount(items)} ARTICLE{cartItemCount(items) > 1 ? "S" : ""}</p><div className="mt-5 max-h-[440px] space-y-4 overflow-y-auto pr-1">{items.map((item) => <div key={item.productId} className="flex gap-3 border-b border-zinc-100 pb-4 last:border-0"><div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-zinc-100"><ProductImage src={item.image} alt={item.name} fill sizes="80px" className="object-cover" /></div><div className="min-w-0 flex-1"><p className="line-clamp-2 font-black">{item.name}</p><p className="mt-1 text-xs text-zinc-500">{formatMoney(getProductPrice(item, currency), currency)} × {item.quantity}</p><p className="mt-1 font-bold text-[#a8861e]">{formatMoney(getProductPrice(item, currency) * item.quantity, currency)}</p></div></div>)}</div><dl className="mt-5 space-y-3 border-t border-zinc-200 pt-5 text-sm"><div className="flex justify-between"><dt>Sous-total</dt><dd className="font-bold">{formatMoney(subtotal, currency)}</dd></div><div className="flex justify-between"><dt>Frais de livraison</dt><dd className="font-bold">{formatMoney(deliveryFee, currency)}</dd></div><div className="flex justify-between border-t border-zinc-200 pt-4 text-lg font-black"><dt>Total final</dt><dd className="text-[#a8861e]">{formatMoney(total, currency)}</dd></div></dl></aside>
       </div>
 
       <PaymentSheet open={paymentSheetOpen} selected={paymentMethod} onlinePaymentsEnabled={onlinePaymentsEnabled} onClose={() => setPaymentSheetOpen(false)} onSelect={(method) => { setPaymentMethod(method); setError(""); setPaymentSheetOpen(false); }} />

@@ -61,11 +61,17 @@ test("paiement à la livraison crée la commande, réserve le stock et notifie",
 
 test("Mobile Money crée une facture PayDunya puis utilise son URL sécurisée", async () => {
   let channels: unknown;
+  let currency: unknown;
+  let totalAmount: unknown;
   const checkout = await createPayDunyaCheckout(checkoutOrder, "mobile_money", payDunyaFetcher((body) => {
     channels = (body.invoice as { channels?: unknown }).channels;
+    totalAmount = (body.invoice as { total_amount?: unknown }).total_amount;
+    currency = (body.custom_data as { currency?: unknown }).currency;
   }));
 
   assert.deepEqual(channels, ["mtn-benin", "moov-benin"]);
+  assert.equal(currency, "XOF");
+  assert.equal(totalAmount, 10000);
   assert.equal(checkout.url, "https://app.paydunya.com/sandbox-checkout/invoice/test-token");
 });
 
@@ -164,7 +170,7 @@ test("une facture PayDunya expirée est traitée comme un échec", async () => {
     invoice: { token: "token-expired", total_amount: 15000 },
     custom_data: { order_number: "KOC-EXP", currency: "XOF" },
     status: "expired",
-  }), { status: 200 })) as ReturnType<typeof fetch>;
+  }), { status: 200 }));
 
   assert.equal(response.status, "failed");
 });

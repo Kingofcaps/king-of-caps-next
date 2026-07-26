@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Check, Clock3, X } from "lucide-react";
 import { notFound } from "next/navigation";
 import { getOrderByNumber, type OrderItem } from "@/app/lib/orders";
-import { formatDualPrice } from "@/app/lib/prices";
+import { formatMoney, normalizeCurrency } from "@/app/lib/currency";
 import CartOrderCleanup from "./CartOrderCleanup";
 import ProductImage from "@/app/components/ProductImage";
 
@@ -32,10 +32,12 @@ export default async function OrderSummaryPage({ params }: PageProps<"/commande-
     unit_price: order.unit_price,
     quantity: order.quantity,
     line_total: order.total_amount,
+    currency: normalizeCurrency(order.currency),
     created_at: order.created_at,
   }];
   const subtotal = order.subtotal_amount ?? items.reduce((total, item) => total + item.line_total, 0);
   const deliveryFee = order.delivery_fee ?? Math.max(0, order.total_amount - subtotal);
+  const currency = normalizeCurrency(order.currency);
   const presentation = isPaid
     ? { title: "Commande confirmée", description: "Votre paiement PayDunya a été vérifié avec succès.", icon: Check, tone: "bg-emerald-100 text-emerald-700" }
     : isPending
@@ -52,9 +54,9 @@ export default async function OrderSummaryPage({ params }: PageProps<"/commande-
         <div className="p-6 sm:p-9"><div className={`grid h-14 w-14 place-items-center rounded-full ${presentation.tone}`}><Icon className="h-7 w-7" /></div><p className="mt-5 text-xs font-bold tracking-[0.22em] text-[#a8861e]">KING OF CAPS</p><h1 className="mt-2 text-3xl font-black sm:text-4xl">{presentation.title}</h1><p className="mt-3 leading-7 text-zinc-600">{presentation.description}</p>
           <div className="mt-6 grid gap-3 rounded-2xl border border-[#ece4c9] bg-[#faf8f1] p-4 sm:grid-cols-2"><div><p className="text-xs font-bold tracking-wider text-zinc-500">NUMÉRO DE COMMANDE</p><p className="mt-1 font-black text-[#a8861e]">{order.order_number}</p></div><div><p className="text-xs font-bold tracking-wider text-zinc-500">DATE</p><p className="mt-1 font-bold">{new Date(order.created_at).toLocaleString("fr-FR")}</p></div></div>
 
-          <h2 className="mt-8 text-lg font-black">Produits</h2><div className="mt-3 space-y-3">{items.map((item) => <article key={item.id} className="flex gap-3 rounded-2xl border border-zinc-200 p-3"><div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-zinc-100"><ProductImage src={item.product_image} alt={item.product_name} fill sizes="80px" className="object-cover" /></div><div className="min-w-0 flex-1"><p className="font-black">{item.product_name}</p><p className="mt-1 text-sm text-zinc-500">{formatDualPrice(item.unit_price)} × {item.quantity}</p><p className="mt-1 font-black text-[#a8861e]">{formatDualPrice(item.line_total)}</p></div></article>)}</div>
+          <h2 className="mt-8 text-lg font-black">Produits</h2><div className="mt-3 space-y-3">{items.map((item) => <article key={item.id} className="flex gap-3 rounded-2xl border border-zinc-200 p-3"><div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-zinc-100"><ProductImage src={item.product_image} alt={item.product_name} fill sizes="80px" className="object-cover" /></div><div className="min-w-0 flex-1"><p className="font-black">{item.product_name}</p><p className="mt-1 text-sm text-zinc-500">{formatMoney(item.unit_price, normalizeCurrency(item.currency, currency))} × {item.quantity}</p><p className="mt-1 font-black text-[#a8861e]">{formatMoney(item.line_total, normalizeCurrency(item.currency, currency))}</p></div></article>)}</div>
 
-          <dl className="mt-6 space-y-3 rounded-2xl bg-zinc-50 p-4 text-sm"><Detail label="Sous-total général" value={formatDualPrice(subtotal)} /><Detail label="Frais de livraison" value={formatDualPrice(deliveryFee)} /><Detail label="Total final" value={formatDualPrice(order.total_amount)} strong /></dl>
+          <dl className="mt-6 space-y-3 rounded-2xl bg-zinc-50 p-4 text-sm"><Detail label="Sous-total général" value={formatMoney(subtotal, currency)} /><Detail label="Frais de livraison" value={formatMoney(deliveryFee, currency)} /><Detail label="Total final" value={formatMoney(order.total_amount, currency)} strong />{normalizeCurrency(order.payment_currency, currency) !== currency && <Detail label="Montant réglé via PayDunya" value={formatMoney(order.payment_total_amount, normalizeCurrency(order.payment_currency))} />}</dl>
           <dl className="mt-6 grid gap-4 text-sm sm:grid-cols-2"><Detail label="Moyen de paiement" value={paymentMethodLabel(order.payment_method)} /><Detail label="Statut du paiement" value={isCashOnDelivery ? "À payer à la livraison" : order.payment_status === "paid" ? "Payé" : order.payment_status === "failed" ? "Échec" : "En attente"} /><Detail label="Statut de la commande" value={order.order_status === "awaiting_payment" ? "Paiement en attente" : order.order_status === "confirmed" ? "Confirmée" : order.order_status === "cancelled" ? "Annulée" : "Enregistrée"} /><Detail label="Client" value={`${order.customer_first_name} ${order.customer_last_name}`} /><Detail label="Téléphone" value={order.customer_phone} /><Detail label="Adresse" value={order.customer_address} /><Detail label="Ville ou arrondissement" value={order.customer_city} /></dl>
 
           {isPending && order.paydunya_token && <a href={`/api/payments/paydunya/return?token=${encodeURIComponent(order.paydunya_token)}`} className="mt-7 flex w-full items-center justify-center rounded-xl border-2 border-[#c9a227] px-5 py-3.5 font-black text-black">Vérifier à nouveau</a>}

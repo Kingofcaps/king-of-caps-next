@@ -16,7 +16,8 @@ import {
   updateOrder,
   type PaymentMethod,
 } from "@/app/lib/orders";
-import { parsePrice } from "@/app/lib/prices";
+import { getProductPrice, isCurrency, type Currency } from "@/app/lib/currency";
+import { getRequestCurrency } from "@/app/lib/currency-server";
 import { InsufficientStockError, getProduct } from "@/app/lib/products";
 import { isValidEmail } from "@/app/lib/validation";
 
@@ -35,6 +36,7 @@ type OrderRequest = {
   city?: unknown;
   note?: unknown;
   paymentMethod?: unknown;
+  currency?: unknown;
 };
 
 type RequestedItem = { productId?: unknown; quantity?: unknown };
@@ -73,6 +75,7 @@ export async function POST(request: Request) {
     const email = text(body.email).toLowerCase();
     const address = text(body.address);
     const city = text(body.city);
+    const currency: Currency = isCurrency(body.currency) ? body.currency.toUpperCase() as Currency : await getRequestCurrency();
 
     if (!items || !checkoutId || checkoutId.length > 100 || !firstName || !lastName || !phone || !email || !address || !city || !validPaymentMethod(body.paymentMethod)) {
       return NextResponse.json({ success: false, error: "Veuillez compléter tous les champs obligatoires." }, { status: 400 });
@@ -106,7 +109,7 @@ export async function POST(request: Request) {
         if (!product || product.id !== productId || !product.inStock || product.stockQuantity < quantity) {
           throw new InsufficientStockError();
         }
-        const unitPrice = parsePrice(product.price);
+        const unitPrice = getProductPrice(product, currency);
         if (!unitPrice) throw new Error("Le prix d’un produit est invalide.");
         return {
           product_id: product.id,
@@ -115,11 +118,22 @@ export async function POST(request: Request) {
           unit_price: unitPrice,
           quantity,
           line_total: unitPrice * quantity,
+          currency,
+        };
+      });
+      const payDunyaItems = products.map(({ product, productId, quantity }) => {
+        if (!product || product.id !== productId) throw new Error("Produit introuvable.");
+        return {
+          product_name: product.name,
+          quantity,
+          unit_price: product.priceXof,
+          line_total: product.priceXof * quantity,
         };
       });
       const subtotalAmount = orderItems.reduce((total, item) => total + item.line_total, 0);
       const deliveryFee = 0;
       const totalAmount = subtotalAmount + deliveryFee;
+      const payDunyaTotalAmount = payDunyaItems.reduce((total, item) => total + item.line_total, 0);
       const firstItem = orderItems[0];
 
       const orderNumber = await createOrderNumber();
@@ -133,6 +147,9 @@ export async function POST(request: Request) {
         subtotal_amount: subtotalAmount,
         delivery_fee: deliveryFee,
         total_amount: totalAmount,
+        currency,
+        payment_currency: isOnlinePayment ? "XOF" : currency,
+        payment_total_amount: isOnlinePayment ? payDunyaTotalAmount : totalAmount,
         customer_first_name: firstName,
         customer_last_name: lastName,
         customer_phone: phone,
@@ -180,7 +197,7 @@ export async function POST(request: Request) {
             console.error(`Échec de la confirmation client pour la commande ${order.order_number}.`, emailResults[1].reason);
           }
         },
-        createOnlineInvoice: (paymentMethod) => createPayDunyaCheckout({ ...orderDetails, items: orderItems }, paymentMethod),
+        createOnlineInvoice: (paymentMethod) => createPayDunyaCheckout({ ...orderDetails, total_amount: payDunyaTotalAmount, items: payDunyaItems }, paymentMethod),
         createAwaitingPaymentOrder: (token) => createMultiProductOrder("awaiting_payment", token),
         reserveOnlineStock: reserveOrCancel,
       });

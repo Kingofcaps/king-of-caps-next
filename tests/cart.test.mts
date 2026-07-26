@@ -10,8 +10,8 @@ import {
   type CartItem,
 } from "../app/lib/cart.ts";
 
-function item(productId: string, quantity = 1, stockQuantity = 5, unitPrice = 5000): CartItem {
-  return { productId, name: `Produit ${productId}`, image: `/${productId}.jpg`, unitPrice, quantity, stockQuantity };
+function item(productId: string, quantity = 1, stockQuantity = 5, priceXof = 5000): CartItem {
+  return { productId, name: `Produit ${productId}`, image: `/${productId}.jpg`, priceXof, priceEur: 800, priceUsd: 900, quantity, stockQuantity };
 }
 
 test("ajoute un produit puis plusieurs produits différents", () => {
@@ -46,8 +46,9 @@ test("restaure un panier sérialisé après actualisation", () => {
 
 test("calcule exactement les totaux des lignes, le total général et le badge", () => {
   const cart = [item("A", 2, 5, 5000), item("B", 3, 5, 7500)];
-  assert.equal(cart[0].unitPrice * cart[0].quantity, 10000);
-  assert.equal(cart[1].unitPrice * cart[1].quantity, 22500);
-  assert.equal(cartSubtotal(cart), 32500);
+  assert.equal(cart[0].priceXof * cart[0].quantity, 10000);
+  assert.equal(cart[1].priceXof * cart[1].quantity, 22500);
+  assert.equal(cartSubtotal(cart, "XOF"), 32500);
+  assert.equal(cartSubtotal(cart, "EUR"), 4000);
   assert.equal(cartItemCount(cart), 5);
 });

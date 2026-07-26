@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Analytics } from "@vercel/analytics/next";
 import { CartProvider } from "./components/CartProvider";
+import { CurrencyProvider } from "./components/CurrencyProvider";
+import { getRequestCurrency } from "./lib/currency-server";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "./lib/seo";
 import "./globals.css";
 
@@ -80,18 +82,22 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const initialCurrency = await getRequestCurrency();
+
   return (
     <html
       lang="fr"
       className="h-full antialiased"
     >
       <body className="min-h-full flex flex-col">
-        <CartProvider>{children}</CartProvider>
+        <CurrencyProvider initialCurrency={initialCurrency}>
+          <CartProvider>{children}</CartProvider>
+        </CurrencyProvider>
         <Analytics />
       </body>
     </html>

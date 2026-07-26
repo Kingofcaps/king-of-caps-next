@@ -1,5 +1,5 @@
 import type { Order } from "@/app/lib/orders";
-import { formatDualPrice } from "@/app/lib/prices";
+import { formatMoney, normalizeCurrency, SUPPORTED_CURRENCIES } from "@/app/lib/currency";
 
 export type ExportDateFilter = "all" | "today" | "week" | "month" | "custom";
 
@@ -47,7 +47,15 @@ export function filterOrdersForExport(orders: Order[], filter: ExportDateFilter,
 }
 
 export function totalExportRevenue(orders: Order[]) {
-  return orders.filter(isRevenueOrder).reduce((total, order) => total + order.total_amount, 0);
+  const totals = new Map(SUPPORTED_CURRENCIES.map((currency) => [currency, 0]));
+  orders.filter(isRevenueOrder).forEach((order) => {
+    const currency = normalizeCurrency(order.currency);
+    totals.set(currency, (totals.get(currency) ?? 0) + order.total_amount);
+  });
+  return SUPPORTED_CURRENCIES
+    .filter((currency) => (totals.get(currency) ?? 0) > 0)
+    .map((currency) => formatMoney(totals.get(currency) ?? 0, currency))
+    .join(" · ") || formatMoney(0, "XOF");
 }
 
 function exportRows(orders: Order[]) {
@@ -58,7 +66,8 @@ function exportRows(orders: Order[]) {
     order.customer_phone,
     order.product_name,
     order.quantity,
-    order.total_amount,
+    formatMoney(order.total_amount, normalizeCurrency(order.currency)),
+    normalizeCurrency(order.currency),
     paymentLabels[order.payment_method],
     paymentStatusLabels[order.payment_status],
     orderStatusLabels[order.order_status],
@@ -67,7 +76,7 @@ function exportRows(orders: Order[]) {
   ]);
 }
 
-const headers = ["N° commande", "Date", "Client", "Téléphone", "Produit", "Quantité", "Total (F)", "Paiement", "Statut paiement", "Statut commande", "Adresse", "Ville / quartier"];
+const headers = ["N° commande", "Date", "Client", "Téléphone", "Produit", "Quantité", "Total", "Devise", "Paiement", "Statut paiement", "Statut commande", "Adresse", "Ville / quartier"];
 
 export async function exportOrdersXlsx(orders: Order[]) {
   const XLSX = await import("xlsx");
@@ -92,7 +101,7 @@ export async function exportOrdersPdf(orders: Order[]) {
 
   autoTable(document, {
     head: [headers],
-    body: exportRows(orders).map((row) => row.map((cell, index) => index === 6 ? formatDualPrice(Number(cell)) : String(cell))),
+    body: exportRows(orders).map((row) => row.map(String)),
     startY: 31,
     margin: { top: 31, left: 8, right: 8, bottom: 12 },
     styles: { fontSize: 6.6, cellPadding: 1.5, overflow: "linebreak" },
@@ -104,7 +113,7 @@ export async function exportOrdersPdf(orders: Order[]) {
       document.setFontSize(8);
       document.setTextColor(90, 90, 90);
       document.text(`Exporté le ${exportDate}`, 8, 17);
-      document.text(`Total commandes : ${orders.length}   |   Revenu : ${formatDualPrice(revenue)}`, 8, 22);
+      document.text(`Total commandes : ${orders.length}   |   Revenu : ${revenue}`, 8, 22);
       document.text(`Page ${document.getNumberOfPages()}`, 285, 205, { align: "right" });
     },
   });

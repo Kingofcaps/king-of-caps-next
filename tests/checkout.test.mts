@@ -11,7 +11,7 @@ test("propose les trois moyens de paiement de la bottom sheet", () => {
 
 test("la sélection du moyen de paiement détermine le bouton final", () => {
   assert.equal(paymentMethodLabel("mobile_money"), "Mobile Money");
-  assert.equal(checkoutButtonLabel("mobile_money", 12500), "Payer 12 500 F");
-  assert.equal(checkoutButtonLabel("card", 12500), "Payer 12 500 F");
-  assert.equal(checkoutButtonLabel("cash_on_delivery", 12500), "Confirmer la commande");
+  assert.equal(checkoutButtonLabel("mobile_money", 12500, "XOF"), "Payer 12 500 F");
+  assert.equal(checkoutButtonLabel("card", 800, "EUR"), "Payer 8 €");
+  assert.equal(checkoutButtonLabel("cash_on_delivery", 12500, "XOF"), "Confirmer la commande");
 });

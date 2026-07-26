@@ -2,12 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cache } from "react";
-import { formatDualPrice, parsePrice } from "../../lib/prices";
+import { parsePrice } from "../../lib/prices";
+import { formatMoney, getProductPrice } from "../../lib/currency";
+import { getRequestCurrency } from "../../lib/currency-server";
 import { getProduct } from "../../lib/products";
 import { absoluteUrl, seoDescription, serializeJsonLd, SITE_NAME, SITE_URL } from "../../lib/seo";
 import ProductImageGallery from "./ProductImageGallery";
 import ProductPurchaseActions from "./ProductPurchaseActions";
 import CartLink from "../../components/CartLink";
+import CurrencySelector from "../../components/CurrencySelector";
 
 const WHATSAPP_URL = "https://wa.me/22950687515";
 const getProductForPage = cache(getProduct);
@@ -65,7 +68,9 @@ export default async function ProductPage({
 
   const additionalImages = Array.from(new Set(product.images))
     .filter((image) => image !== product.image);
-  const orderMessage = `Bonjour KING OF CAPS, je souhaite commander ${product.name} au prix de ${formatDualPrice(product.price)}.`;
+  const currency = await getRequestCurrency();
+  const selectedPrice = getProductPrice(product, currency);
+  const orderMessage = `Bonjour KING OF CAPS, je souhaite commander ${product.name} au prix de ${formatMoney(selectedPrice, currency)}.`;
   const orderUrl = `${WHATSAPP_URL}?text=${encodeURIComponent(orderMessage)}`;
   const productUrl = absoluteUrl(`/product/${product.id}`);
   const productJsonLd = {
@@ -110,7 +115,7 @@ export default async function ProductPage({
           <Link href="/" className="text-sm font-bold tracking-[0.22em] text-black">
             KING OF CAPS
           </Link>
-          <div className="flex items-center gap-2"><CartLink /><a href={WHATSAPP_URL} target="_blank" rel="noreferrer" className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#c9a227]">WhatsApp</a></div>
+          <div className="flex items-center gap-2"><CurrencySelector /><CartLink /><a href={WHATSAPP_URL} target="_blank" rel="noreferrer" className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#c9a227]">WhatsApp</a></div>
         </div>
       </header>
 
@@ -138,7 +143,7 @@ export default async function ProductPage({
           </h1>
 
           <div className="mt-7 flex items-center gap-4">
-            <p className="text-3xl font-black leading-tight text-[#c9a227]">{formatDualPrice(product.price)}</p>
+            <p className="text-3xl font-black leading-tight text-[#c9a227]">{formatMoney(selectedPrice, currency)}</p>
             <span className={`rounded-full border px-3 py-1 text-sm font-bold ${product.inStock ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-600"}`}>
               {product.inStock ? "En stock" : "Rupture de stock"}
             </span>
@@ -153,7 +158,7 @@ export default async function ProductPage({
             <p className="mt-2">Commande simple et sécurisée directement sur WhatsApp.</p>
           </div>
 
-          {product.inStock ? <ProductPurchaseActions product={{ productId: product.id, name: product.name, image: product.image, unitPrice: parsePrice(product.price), stockQuantity: product.stockQuantity }} /> : <span aria-disabled="true" className="mt-10 inline-flex w-full cursor-not-allowed items-center justify-center rounded-xl bg-zinc-200 px-6 py-4 text-base font-black text-zinc-500 sm:w-auto">Rupture de stock</span>}
+          {product.inStock ? <ProductPurchaseActions product={{ productId: product.id, name: product.name, image: product.image, priceXof: product.priceXof, priceEur: product.priceEur, priceUsd: product.priceUsd, stockQuantity: product.stockQuantity }} /> : <span aria-disabled="true" className="mt-10 inline-flex w-full cursor-not-allowed items-center justify-center rounded-xl bg-zinc-200 px-6 py-4 text-base font-black text-zinc-500 sm:w-auto">Rupture de stock</span>}
           <div className="mt-3 grid gap-3 sm:flex">
             <a
               href={orderUrl}

@@ -15,8 +15,12 @@ export function formatFcfaPrice(priceFcfa: number | string) {
   return `${fcfaFormatter.format(parsePrice(priceFcfa))} F`;
 }
 
-export function formatDualPrice(priceFcfa: number | string) {
+export function formatEuroPrice(priceFcfa: number | string) {
   const amountFcfa = parsePrice(priceFcfa);
-  const priceEuro = Math.round(amountFcfa / CFA_FRANCS_PER_EURO);
-  return `${priceEuro} € (${fcfaFormatter.format(amountFcfa)} F)`;
+  return `${Math.round(amountFcfa / CFA_FRANCS_PER_EURO)} €`;
+}
+
+export function formatDualPrice(priceFcfa: number | string) {
+  if (typeof priceFcfa === "string" && /(?:\bF\b|€|\$)/.test(priceFcfa)) return priceFcfa;
+  return formatFcfaPrice(priceFcfa);
 }

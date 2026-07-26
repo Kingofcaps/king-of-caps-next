@@ -2,20 +2,23 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { formatDualPrice } from "@/app/lib/prices";
+import { formatMoney, getProductPrice, type Currency } from "@/app/lib/currency";
 import type { Product } from "@/app/lib/products";
 import ProductReveal from "./ProductReveal";
 import ProductCardImage from "./ProductCardImage";
+import ProductCardPrice from "./ProductCardPrice";
 import TrendingProducts from "./TrendingProducts";
+import { useCurrency } from "./CurrencyProvider";
 
 const WHATSAPP_URL = "https://wa.me/22950687515";
 
-function getOrderUrl(product: Product) {
-  const message = `Bonjour KING OF CAPS, je souhaite commander ${product.name} au prix de ${formatDualPrice(product.price)}.`;
+function getOrderUrl(product: Product, currency: Currency) {
+  const message = `Bonjour KING OF CAPS, je souhaite commander ${product.name} au prix de ${formatMoney(getProductPrice(product, currency), currency)}.`;
   return `${WHATSAPP_URL}?text=${encodeURIComponent(message)}`;
 }
 
 export default function ProductGallery({ products }: { products: Product[] }) {
+  const { currency } = useCurrency();
   const [search, setSearch] = useState("");
 
   useEffect(() => {
@@ -79,17 +82,12 @@ export default function ProductGallery({ products }: { products: Product[] }) {
                 >
                   {product.name}
                 </Link>
-                <div className="mt-1 flex items-center justify-between gap-1 sm:gap-3">
-                  <p className="text-[10px] font-black leading-tight text-[#d4af37] sm:text-lg">{formatDualPrice(product.price)}</p>
-                  <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold sm:px-2.5 sm:py-1 sm:text-xs ${product.inStock ? "bg-emerald-900 text-emerald-100" : "bg-red-50 text-red-600"}`}>
-                    {product.inStock ? "En stock" : "Rupture de stock"}
-                  </span>
-                </div>
+                <ProductCardPrice prices={product} inStock={product.inStock} />
                 <div className="mt-2 sm:mt-3">
                   <Link href={`/product/${product.id}`} className="block bg-transparent text-center text-[10px] font-black tracking-wide text-[#d4af37] transition hover:text-black sm:hidden">→ VOIR</Link>
                   <div className="hidden grid-cols-2 gap-2 sm:grid">
                     {product.inStock ? <Link href={`/checkout/${product.id}`} className="rounded-xl bg-[#d4af37] px-3 py-2.5 text-center text-sm font-black text-zinc-950 transition hover:bg-[#c9a227]">Commander en ligne</Link> : <span aria-disabled="true" className="cursor-not-allowed rounded-xl bg-zinc-200 px-3 py-2.5 text-center text-sm font-black text-zinc-500">Rupture de stock</span>}
-                    <a href={getOrderUrl(product)} target="_blank" rel="noreferrer" className="rounded-xl border border-[#e5e5e5] bg-[#fafafa] px-3 py-2.5 text-center text-sm font-black text-zinc-800 transition hover:border-[#c9a227] hover:bg-white">Commander via WhatsApp</a>
+                    <a href={getOrderUrl(product, currency)} target="_blank" rel="noreferrer" className="rounded-xl border border-[#e5e5e5] bg-[#fafafa] px-3 py-2.5 text-center text-sm font-black text-zinc-800 transition hover:border-[#c9a227] hover:bg-white">Commander via WhatsApp</a>
                   </div>
                 </div>
               </div>

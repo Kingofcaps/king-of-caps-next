@@ -11,6 +11,7 @@ export type OrderItem = {
   unit_price: number;
   quantity: number;
   line_total: number;
+  currency: Currency;
   created_at: string;
 };
 
@@ -23,6 +24,9 @@ export type Order = {
   quantity: number;
   unit_price: number;
   total_amount: number;
+  currency: Currency;
+  payment_currency: Currency;
+  payment_total_amount: number;
   customer_first_name: string;
   customer_last_name: string;
   customer_phone: string;
@@ -260,3 +264,4 @@ export async function markOrderStockReserved(id: string) {
   const [order] = (await response.json()) as Order[];
   return order ?? null;
 }
+import type { Currency } from "./currency";

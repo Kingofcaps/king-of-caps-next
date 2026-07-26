@@ -6,6 +6,7 @@ import { selectFeaturedProducts } from "@/app/lib/featured-products";
 import type { Product } from "@/app/lib/products";
 import styles from "./TrendingProducts.module.css";
 import ProductCardImage from "./ProductCardImage";
+import ProductCardPrice from "./ProductCardPrice";
 
 function TrendingCard({ product, duplicate = false }: { product: Product; duplicate?: boolean }) {
   return (
@@ -27,7 +28,8 @@ function TrendingCard({ product, duplicate = false }: { product: Product; duplic
           </span>
         )}
       </div>
-      <div className="px-2 py-1.5 text-center sm:py-2">
+      <div className="px-2 pb-1.5 pt-1.5 sm:pb-2 sm:pt-2">
+        <ProductCardPrice prices={product} inStock={product.inStock} />
         <span className="block text-[10px] font-black tracking-[0.1em] text-[#c9a227] transition group-hover:text-black sm:text-xs">
           VOIR &gt;
         </span>

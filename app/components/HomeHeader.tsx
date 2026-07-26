@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import CartLink from "./CartLink";
+import CurrencySelector from "./CurrencySelector";
 
 const WHATSAPP_URL = "https://wa.me/22950687515";
 
@@ -37,6 +38,7 @@ export default function HomeHeader() {
           KING OF CAPS
         </span>
         <div className="flex shrink-0 items-center gap-2">
+          <CurrencySelector />
           <CartLink />
           <button
             type="button"
