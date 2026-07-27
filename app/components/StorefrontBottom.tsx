@@ -72,8 +72,12 @@ export default function StorefrontBottom() {
         </div>
       </section>
 
-      <footer className="bg-zinc-950 px-5 text-white sm:px-8">
-        <div className="mx-auto max-w-7xl py-8 sm:py-10">
+      <footer
+        className="relative overflow-hidden bg-[#020817] bg-cover bg-center bg-no-repeat px-5 text-white sm:px-8"
+        style={{ backgroundImage: "url('/footer-background.jpeg')" }}
+      >
+        <div aria-hidden="true" className="absolute inset-0 bg-[#020817]/80" />
+        <div className="relative z-10 mx-auto max-w-7xl py-8 sm:py-10">
           <div className="grid gap-6 border-b border-white/10 pb-7 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
             <div>
               <p className="text-xs font-bold tracking-[0.36em] text-[#d4af37]">KING OF CAPS</p>
