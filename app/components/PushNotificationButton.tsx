@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 type Availability =
   | "checking"
   | "ready"
+  | "active"
   | "denied"
   | "unsupported"
   | "needs-install";
@@ -65,7 +66,15 @@ export default function PushNotificationButton() {
     let active = true;
 
     async function inspectPushSupport() {
-      if (isIosDevice() && !isStandalonePwa()) {
+      const ios = isIosDevice();
+      const standalone = isStandalonePwa();
+      console.info("[push][client] Vérification du support.", {
+        ios,
+        standalone,
+        permission: "Notification" in window ? Notification.permission : "indisponible",
+      });
+
+      if (ios && !standalone) {
         if (active) setAvailability("needs-install");
         return;
       }
@@ -82,17 +91,32 @@ export default function PushNotificationButton() {
         return;
       }
 
+      if (Notification.permission === "default") {
+        if (active) setAvailability("ready");
+        return;
+      }
+
       try {
         const registration = await registerPushServiceWorker();
         const existingSubscription =
           await registration.pushManager.getSubscription();
         if (!active) return;
+        if (!existingSubscription) {
+          setSubscription(null);
+          setAvailability("ready");
+          return;
+        }
+
+        await postJson("/api/push/subscribe", existingSubscription.toJSON());
+        if (!active) return;
         setSubscription(existingSubscription);
-        setAvailability("ready");
-      } catch {
+        setAvailability("active");
+        console.info("[push][client] Abonnement existant confirmé côté serveur.");
+      } catch (caughtError) {
         if (!active) return;
         setAvailability("ready");
         setError("Impossible de préparer les notifications.");
+        console.error("[push][client] Échec de vérification de l’abonnement.", caughtError);
       }
     }
 
@@ -112,11 +136,13 @@ export default function PushNotificationButton() {
         throw new Error("La clé publique VAPID n’est pas configurée.");
       }
 
+      console.info("[push][client] Demande d’activation déclenchée par l’utilisateur.");
       const permission = Notification.permission === "granted"
         ? "granted"
         : await Notification.requestPermission();
       if (permission !== "granted") {
-        setAvailability("denied");
+        setAvailability(permission === "denied" ? "denied" : "ready");
+        console.warn("[push][client] Autorisation non accordée.", { permission });
         return;
       }
 
@@ -132,7 +158,8 @@ export default function PushNotificationButton() {
 
       await postJson("/api/push/subscribe", nextSubscription.toJSON());
       setSubscription(nextSubscription);
-      setAvailability("ready");
+      setAvailability("active");
+      console.info("[push][client] Notifications activées et abonnement enregistré.");
     } catch (caughtError) {
       if (createdSubscription) {
         await createdSubscription.unsubscribe().catch(() => false);
@@ -142,6 +169,8 @@ export default function PushNotificationButton() {
           ? caughtError.message
           : "Impossible d’activer les notifications.",
       );
+      setAvailability("ready");
+      console.error("[push][client] Échec d’activation des notifications.", caughtError);
     } finally {
       setBusy(false);
     }
@@ -165,12 +194,15 @@ export default function PushNotificationButton() {
       });
       await currentSubscription.unsubscribe();
       setSubscription(null);
+      setAvailability("ready");
+      console.info("[push][client] Notifications désactivées.");
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
           ? caughtError.message
           : "Impossible de désactiver les notifications.",
       );
+      console.error("[push][client] Échec de désactivation des notifications.", caughtError);
     } finally {
       setBusy(false);
     }
@@ -196,18 +228,17 @@ export default function PushNotificationButton() {
   if (availability === "denied") {
     return (
       <p className="max-w-56 text-xs leading-5 text-zinc-400">
-        Notifications refusées. Vous pouvez les autoriser dans les réglages du
-        navigateur.
+        Notifications bloquées dans les réglages de l’iPhone
       </p>
     );
   }
 
-  const active = subscription !== null;
+  const notificationsActive = availability === "active" && subscription !== null;
   const label = availability === "checking"
     ? "Vérification…"
     : busy
       ? "Chargement…"
-      : active
+      : notificationsActive
         ? "Notifications activées"
         : "Activer les notifications";
 
@@ -215,14 +246,14 @@ export default function PushNotificationButton() {
     <div className="flex max-w-64 flex-col items-start gap-1.5">
       <button
         type="button"
-        aria-pressed={active}
+        aria-pressed={notificationsActive}
         disabled={availability === "checking" || busy}
-        onClick={active ? disableNotifications : enableNotifications}
+        onClick={notificationsActive ? disableNotifications : enableNotifications}
         className="rounded-full border border-[#d4af37]/70 px-3.5 py-2 text-xs font-bold text-white transition hover:border-[#d4af37] hover:text-[#d4af37] disabled:cursor-wait disabled:opacity-60"
       >
         {label}
       </button>
-      {active && !busy && (
+      {notificationsActive && !busy && (
         <span className="text-[11px] leading-4 text-zinc-400">
           Cliquez à nouveau pour désactiver.
         </span>
