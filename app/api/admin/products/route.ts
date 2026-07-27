@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
+import { after, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { ADMIN_COOKIE, isAdminToken } from "@/app/lib/admin-auth";
 import { getProducts, insertProduct, type Product } from "@/app/lib/products";
@@ -103,8 +104,24 @@ export async function POST(request: Request) {
       createdAt: new Date().toISOString(),
     };
 
+    console.info("[products][create] Insertion Supabase démarrée.", {
+      productId,
+      name,
+      stockQuantity,
+      available,
+      featured: product.featured,
+      imageCount: product.images.length,
+    });
     const createdProduct = await insertProduct(product);
     if (!createdProduct) throw new Error("Supabase n’a pas retourné le produit créé.");
+    console.info("[products][create] Produit créé dans Supabase.", {
+      productId: createdProduct.id,
+      name: createdProduct.name,
+      stockQuantity: createdProduct.stockQuantity,
+      available: createdProduct.available,
+      createdAt: createdProduct.createdAt,
+    });
+
     await recordStockMovementSafely({
       productId: createdProduct.id,
       productName: createdProduct.name,
@@ -114,14 +131,40 @@ export async function POST(request: Request) {
       newQuantity: stockQuantity,
       note: "Création du produit",
     });
+
     try {
-      await sendNewProductPushNotification(createdProduct);
-    } catch (pushError) {
-      console.error("[push][product-create] Le produit a été créé, mais la notification push a échoué.", {
+      revalidatePath("/");
+      revalidatePath(`/product/${createdProduct.id}`);
+      console.info("[products][create] Catalogue public revalidé.", {
         productId: createdProduct.id,
-        error: pushError instanceof Error ? pushError.message : "Erreur inconnue",
+      });
+    } catch (revalidationError) {
+      console.error("[products][create] Le produit est créé, mais la revalidation a échoué.", {
+        productId: createdProduct.id,
+        error: revalidationError instanceof Error
+          ? revalidationError.message
+          : "Erreur inconnue",
       });
     }
+
+    after(async () => {
+      console.info("[push][product-create] Diffusion planifiée après la réponse admin.", {
+        productId: createdProduct.id,
+      });
+      try {
+        const result = await sendNewProductPushNotification(createdProduct);
+        console.info("[push][product-create] Diffusion terminée après création.", {
+          productId: createdProduct.id,
+          ...result,
+        });
+      } catch (pushError) {
+        console.error("[push][product-create] Le produit reste créé malgré l’échec push.", {
+          productId: createdProduct.id,
+          error: pushError instanceof Error ? pushError.message : "Erreur inconnue",
+        });
+      }
+    });
+
     return NextResponse.json(createdProduct, { status: 201 });
   } catch (error) {
     if (uploadedUrls.length > 0) {

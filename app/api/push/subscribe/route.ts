@@ -19,6 +19,9 @@ export async function POST(request: Request) {
     request.headers.get("user-agent"),
   );
   if (!subscription) {
+    console.warn("[push][subscribe] Corps d’abonnement invalide.", {
+      bodyPresent: Boolean(body),
+    });
     return NextResponse.json(
       { error: "Abonnement push invalide." },
       { status: 400 },
@@ -26,11 +29,22 @@ export async function POST(request: Request) {
   }
 
   try {
+    console.info("[push][subscribe] Abonnement validé, upsert Supabase démarré.", {
+      endpointPresent: Boolean(subscription.endpoint),
+      p256dhPresent: Boolean(subscription.p256dh),
+      authPresent: Boolean(subscription.auth),
+      userAgentPresent: Boolean(subscription.user_agent),
+    });
     await savePushSubscription(subscription);
-    return NextResponse.json({ success: true });
-  } catch {
+    console.info("[push][subscribe] Upsert Supabase terminé.");
+    return NextResponse.json({ success: true }, { status: 201 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erreur inconnue";
+    console.error("[push][subscribe] Échec d’enregistrement Supabase.", {
+      message,
+    });
     return NextResponse.json(
-      { error: "Impossible d’enregistrer les notifications." },
+      { error: message },
       { status: 500 },
     );
   }

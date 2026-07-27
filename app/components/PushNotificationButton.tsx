@@ -11,6 +11,7 @@ type Availability =
   | "needs-install";
 
 const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+const VAPID_PUBLIC_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 function isIosDevice() {
   return /iPad|iPhone|iPod/.test(navigator.userAgent)
@@ -26,17 +27,41 @@ function isStandalonePwa() {
 }
 
 function urlBase64ToUint8Array(value: string) {
+  if (value !== value.trim()) {
+    throw new Error("La clé publique VAPID contient un espace ou un retour à la ligne.");
+  }
+  if (!VAPID_PUBLIC_KEY_PATTERN.test(value)) {
+    throw new Error("La clé publique VAPID contient des caractères invalides ou des guillemets.");
+  }
+
   const padding = "=".repeat((4 - (value.length % 4)) % 4);
   const base64 = `${value}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
   const decoded = window.atob(base64);
-  return Uint8Array.from(decoded, (character) => character.charCodeAt(0));
+  const bytes = Uint8Array.from(decoded, (character) => character.charCodeAt(0));
+  if (bytes.length !== 65 || bytes[0] !== 4) {
+    throw new Error("La clé publique VAPID n’est pas une clé P-256 valide.");
+  }
+  return bytes;
 }
 
 async function registerPushServiceWorker() {
-  return navigator.serviceWorker.register("/sw.js", {
+  console.info("[push][client] Service worker disponible.", {
+    available: "serviceWorker" in navigator,
+  });
+  const registration = await navigator.serviceWorker.register("/sw.js", {
     scope: "/",
     updateViaCache: "none",
   });
+  await registration.update().catch((error) => {
+    console.warn("[push][client] Mise à jour du service worker impossible.", error);
+  });
+  const readyRegistration = await navigator.serviceWorker.ready;
+  console.info("[push][client] navigator.serviceWorker.ready résolu.", {
+    scope: readyRegistration.scope,
+    active: Boolean(readyRegistration.active),
+    pushManager: Boolean(readyRegistration.pushManager),
+  });
+  return readyRegistration;
 }
 
 async function postJson(path: string, body: unknown) {
@@ -46,12 +71,27 @@ async function postJson(path: string, body: unknown) {
     credentials: "same-origin",
     body: JSON.stringify(body),
   });
-  if (response.ok) return;
+  const responseText = await response.text();
+  type ApiResponse = { error?: string; success?: boolean };
+  let payload: ApiResponse | null = null;
+  try {
+    payload = responseText ? JSON.parse(responseText) as ApiResponse : null;
+  } catch {
+    payload = null;
+  }
+  console.info("[push][client] Réponse de la route d’enregistrement.", {
+    path,
+    status: response.status,
+    ok: response.ok,
+    response: payload ?? responseText.slice(0, 500),
+  });
+  if (response.ok) return payload;
 
-  const payload = await response.json().catch(() => null) as {
-    error?: string;
-  } | null;
-  throw new Error(payload?.error || "La requête a échoué.");
+  throw new Error(
+    payload?.error
+      || responseText.slice(0, 500)
+      || `La route d’enregistrement a répondu ${response.status}.`,
+  );
 }
 
 export default function PushNotificationButton() {
@@ -72,6 +112,8 @@ export default function PushNotificationButton() {
         ios,
         standalone,
         permission: "Notification" in window ? Notification.permission : "indisponible",
+        vapidPublicKeyPresent: Boolean(vapidPublicKey),
+        vapidPublicKeyLength: vapidPublicKey?.length ?? 0,
       });
 
       if (ios && !standalone) {
@@ -100,6 +142,9 @@ export default function PushNotificationButton() {
         const registration = await registerPushServiceWorker();
         const existingSubscription =
           await registration.pushManager.getSubscription();
+        console.info("[push][client] Résultat de pushManager.getSubscription().", {
+          exists: Boolean(existingSubscription),
+        });
         if (!active) return;
         if (!existingSubscription) {
           setSubscription(null);
@@ -132,14 +177,27 @@ export default function PushNotificationButton() {
     let createdSubscription: PushSubscription | null = null;
 
     try {
-      if (!vapidPublicKey?.trim()) {
+      if (!vapidPublicKey) {
         throw new Error("La clé publique VAPID n’est pas configurée.");
       }
+      console.info("[push][client] Configuration VAPID publique.", {
+        present: true,
+        length: vapidPublicKey.length,
+        hasWhitespace: /\s/.test(vapidPublicKey),
+        hasQuotes: /["']/.test(vapidPublicKey),
+      });
+      const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
+      console.info("[push][client] Clé VAPID convertie.", {
+        byteLength: applicationServerKey.byteLength,
+      });
 
       console.info("[push][client] Demande d’activation déclenchée par l’utilisateur.");
       const permission = Notification.permission === "granted"
         ? "granted"
         : await Notification.requestPermission();
+      console.info("[push][client] Résultat de Notification.requestPermission().", {
+        permission,
+      });
       if (permission !== "granted") {
         setAvailability(permission === "denied" ? "denied" : "ready");
         console.warn("[push][client] Autorisation non accordée.", { permission });
@@ -148,12 +206,22 @@ export default function PushNotificationButton() {
 
       const registration = await registerPushServiceWorker();
       let nextSubscription = await registration.pushManager.getSubscription();
+      console.info("[push][client] Résultat de pushManager.getSubscription().", {
+        exists: Boolean(nextSubscription),
+      });
       if (!nextSubscription) {
         nextSubscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+          applicationServerKey,
         });
         createdSubscription = nextSubscription;
+        const serializedSubscription = nextSubscription.toJSON();
+        console.info("[push][client] Résultat de pushManager.subscribe().", {
+          created: true,
+          endpointPresent: Boolean(serializedSubscription.endpoint),
+          p256dhPresent: Boolean(serializedSubscription.keys?.p256dh),
+          authPresent: Boolean(serializedSubscription.keys?.auth),
+        });
       }
 
       await postJson("/api/push/subscribe", nextSubscription.toJSON());
