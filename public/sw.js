@@ -29,11 +29,29 @@ self.addEventListener("push", (event) => {
     targetUrl = "/";
   }
 
+  let image;
+  if (typeof payload.image === "string" && payload.image.trim()) {
+    try {
+      const candidate = new URL(payload.image.trim(), self.location.origin);
+      if (candidate.protocol === "https:" || candidate.protocol === "http:") {
+        image = candidate.href;
+      }
+    } catch {
+      image = undefined;
+    }
+  }
+
+  const tag = typeof payload.tag === "string" && payload.tag.trim()
+    ? payload.tag.trim().slice(0, 128)
+    : undefined;
+
   event.waitUntil(
     self.registration.showNotification(title, {
       body: message,
       icon: "/icon.png",
       badge: "/icon.png",
+      ...(image ? { image } : {}),
+      ...(tag ? { tag } : {}),
       data: { url: targetUrl },
     }),
   );

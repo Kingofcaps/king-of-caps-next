@@ -5,6 +5,7 @@ import { ADMIN_COOKIE, isAdminToken } from "@/app/lib/admin-auth";
 import { getProducts, insertProduct, type Product } from "@/app/lib/products";
 import { recordStockMovementSafely } from "@/app/lib/stock-movements";
 import { deleteProductImages, uploadProductImage } from "@/app/lib/product-images";
+import { sendNewProductPushNotification } from "@/app/lib/push-notifications";
 
 export const runtime = "nodejs";
 
@@ -113,6 +114,14 @@ export async function POST(request: Request) {
       newQuantity: stockQuantity,
       note: "Création du produit",
     });
+    try {
+      await sendNewProductPushNotification(createdProduct);
+    } catch (pushError) {
+      console.error("[push][product-create] Le produit a été créé, mais la notification push a échoué.", {
+        productId: createdProduct.id,
+        error: pushError instanceof Error ? pushError.message : "Erreur inconnue",
+      });
+    }
     return NextResponse.json(createdProduct, { status: 201 });
   } catch (error) {
     if (uploadedUrls.length > 0) {

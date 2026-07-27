@@ -12,6 +12,14 @@ export type PushSubscriptionRecord = {
   user_agent: string | null;
 };
 
+export type PushNotificationEventResult = {
+  status: "completed" | "failed";
+  subscriptionCount: number;
+  deliveredCount: number;
+  failedCount: number;
+  removedCount: number;
+};
+
 function text(value: unknown, maximumLength: number) {
   if (typeof value !== "string") return null;
   const normalized = value.trim();
@@ -86,8 +94,19 @@ async function pushSubscriptionsRequest(path: string, init: RequestInit) {
   });
 
   if (!response.ok) {
-    throw new Error(`Supabase a refusé la requête push (${response.status}).`);
+    const details = await response.text().catch(() => "");
+    throw new Error(`Supabase a refusé la requête push (${response.status})${details ? ` : ${details.slice(0, 300)}` : ""}.`);
   }
+
+  return response;
+}
+
+export async function listPushSubscriptions() {
+  const response = await pushSubscriptionsRequest(
+    "push_subscriptions?select=endpoint,p256dh,auth,user_agent&order=created_at.asc",
+    { method: "GET" },
+  );
+  return (await response.json()) as PushSubscriptionRecord[];
 }
 
 export async function savePushSubscription(
@@ -112,6 +131,38 @@ export async function deletePushSubscription(endpoint: string) {
     {
       method: "DELETE",
       headers: { Prefer: "return=minimal" },
+    },
+  );
+}
+
+export async function claimPushNotificationEvent(eventKey: string, productId: string) {
+  const response = await pushSubscriptionsRequest(
+    "rpc/claim_push_notification_event",
+    {
+      method: "POST",
+      body: JSON.stringify({ p_event_key: eventKey, p_product_id: productId }),
+    },
+  );
+  return (await response.json()) === true;
+}
+
+export async function completePushNotificationEvent(
+  eventKey: string,
+  result: PushNotificationEventResult,
+) {
+  await pushSubscriptionsRequest(
+    `push_notification_events?event_key=eq.${encodeURIComponent(eventKey)}`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        status: result.status,
+        subscription_count: result.subscriptionCount,
+        delivered_count: result.deliveredCount,
+        failed_count: result.failedCount,
+        removed_count: result.removedCount,
+        completed_at: new Date().toISOString(),
+      }),
     },
   );
 }
