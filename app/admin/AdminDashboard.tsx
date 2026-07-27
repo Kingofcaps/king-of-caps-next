@@ -48,6 +48,14 @@ type BulkDeleteResult = {
   failures: Array<{ id: string; error: string }>;
   imageCleanupWarning: string | null;
 };
+type AdminApiErrorPayload = {
+  error?: string;
+  code?: string | null;
+  message?: string | null;
+  details?: string | null;
+  hint?: string | null;
+  supabaseStatus?: number | null;
+};
 
 const emptyProduct: ProductForm = {
   name: "",
@@ -430,9 +438,45 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     }
   }
 
-  async function readResponse<T = Product>(response: Response) {
-    const data = (await response.json()) as T & { error?: string };
-    if (!response.ok) throw new Error(data.error ?? "Une erreur est survenue.");
+  async function readResponse<T = Product>(response: Response, logContext?: string) {
+    const responseText = await response.text();
+    let data: (T & AdminApiErrorPayload) | null = null;
+    try {
+      data = responseText
+        ? JSON.parse(responseText) as T & AdminApiErrorPayload
+        : null;
+    } catch (parseError) {
+      if (logContext) {
+        console.error(`[admin][${logContext}] Réponse JSON invalide.`, {
+          status: response.status,
+          statusText: response.statusText,
+          responseText,
+          parseError,
+        });
+      }
+    }
+
+    if (!response.ok) {
+      if (logContext) {
+        console.error(`[admin][${logContext}] Échec de la requête API.`, {
+          status: response.status,
+          statusText: response.statusText,
+          code: data?.code ?? null,
+          message: data?.message ?? data?.error ?? null,
+          details: data?.details ?? null,
+          hint: data?.hint ?? null,
+          supabaseStatus: data?.supabaseStatus ?? null,
+          response: data ?? responseText,
+        });
+      }
+      throw new Error(data?.error ?? data?.message ?? (responseText || "Une erreur est survenue."));
+    }
+    if (!data) throw new Error("La réponse de l’API est vide ou invalide.");
+    if (logContext) {
+      console.info(`[admin][${logContext}] Requête API réussie.`, {
+        status: response.status,
+      });
+    }
     return data;
   }
 
@@ -469,8 +513,15 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     try {
       const formData = new FormData();
       appendFormData(formData, newProduct, newImage, newImages);
+      console.info("[admin][product-create] Envoi de la création du produit.", {
+        name: newProduct.name,
+        stockQuantity: newProduct.stockQuantity,
+        featured: newProduct.featured,
+        additionalImageCount: newImages.length,
+      });
       const product = await readResponse(
         await fetch("/api/admin/products", { method: "POST", body: formData }),
+        "product-create",
       );
       setProducts((current) => [...current, product]);
       setNewProduct(emptyProduct);
@@ -647,6 +698,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
         );
         const product = await readResponse(
           await fetch("/api/admin/products", { method: "POST", body: formData }),
+          "bulk-product-create",
         );
         createdProducts.push(product);
       } catch (error) {

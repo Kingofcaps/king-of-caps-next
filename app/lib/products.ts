@@ -55,6 +55,29 @@ export class InsufficientStockError extends Error {
   }
 }
 
+type SupabaseErrorPayload = {
+  code?: string | null;
+  message?: string | null;
+  details?: string | null;
+  hint?: string | null;
+};
+
+export class SupabaseProductsError extends Error {
+  readonly status: number;
+  readonly code: string | null;
+  readonly details: string | null;
+  readonly hint: string | null;
+
+  constructor(status: number, payload: SupabaseErrorPayload) {
+    super(payload.message?.trim() || `Supabase a refusé la requête produits (${status}).`);
+    this.name = "SupabaseProductsError";
+    this.status = status;
+    this.code = payload.code ?? null;
+    this.details = payload.details ?? null;
+    this.hint = payload.hint ?? null;
+  }
+}
+
 function getSupabaseConfig() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -80,7 +103,16 @@ async function supabaseProductsRequest(path: string, init: RequestInit = {}) {
   });
 
   if (!response.ok) {
-    throw new Error(`Supabase a refusé la requête produits (${response.status}).`);
+    const responseText = await response.text().catch(() => "");
+    let payload: SupabaseErrorPayload = {};
+    try {
+      payload = responseText
+        ? JSON.parse(responseText) as SupabaseErrorPayload
+        : {};
+    } catch {
+      payload = { message: responseText || null };
+    }
+    throw new SupabaseProductsError(response.status, payload);
   }
 
   return response;

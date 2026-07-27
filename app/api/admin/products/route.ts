@@ -3,7 +3,12 @@ import { revalidatePath } from "next/cache";
 import { after, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { ADMIN_COOKIE, isAdminToken } from "@/app/lib/admin-auth";
-import { getProducts, insertProduct, type Product } from "@/app/lib/products";
+import {
+  getProducts,
+  insertProduct,
+  SupabaseProductsError,
+  type Product,
+} from "@/app/lib/products";
 import { recordStockMovementSafely } from "@/app/lib/stock-movements";
 import { deleteProductImages, uploadProductImage } from "@/app/lib/product-images";
 import { sendNewProductPushNotification } from "@/app/lib/push-notifications";
@@ -167,6 +172,25 @@ export async function POST(request: Request) {
 
     return NextResponse.json(createdProduct, { status: 201 });
   } catch (error) {
+    const supabaseError = error instanceof SupabaseProductsError ? error : null;
+    const errorResponse = {
+      error: error instanceof Error ? error.message : "Impossible d’ajouter ce produit.",
+      code: supabaseError?.code ?? null,
+      message: error instanceof Error ? error.message : "Impossible d’ajouter ce produit.",
+      details: supabaseError?.details ?? null,
+      hint: supabaseError?.hint ?? null,
+      supabaseStatus: supabaseError?.status ?? null,
+    };
+    console.error("[products][create] Échec de création du produit.", {
+      code: errorResponse.code,
+      message: errorResponse.message,
+      details: errorResponse.details,
+      hint: errorResponse.hint,
+      supabaseStatus: errorResponse.supabaseStatus,
+      errorName: error instanceof Error ? error.name : typeof error,
+      stack: error instanceof Error ? error.stack : null,
+    });
+
     if (uploadedUrls.length > 0) {
       try {
         await deleteProductImages(uploadedUrls);
@@ -175,7 +199,7 @@ export async function POST(request: Request) {
       }
     }
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Impossible d’ajouter ce produit." },
+      errorResponse,
       { status: 400 },
     );
   }
