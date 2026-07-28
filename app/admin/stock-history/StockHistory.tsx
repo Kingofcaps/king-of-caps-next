@@ -15,6 +15,7 @@ const movementLabels: Record<StockMovementType, string> = {
   product_edit: "Modification du produit",
   order_deduction: "Déduction commande",
   order_cancellation: "Restauration après annulation",
+  shop_sale: "Vente boutique",
 };
 
 function dateKey(value: string) {

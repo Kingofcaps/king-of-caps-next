@@ -23,7 +23,7 @@ export type Product = {
   createdAt: string;
 };
 
-type ProductRecord = {
+export type ProductRecord = {
   id: string;
   name: string;
   price: string;
@@ -127,7 +127,7 @@ function normalizeImages(value: unknown, primaryImage: unknown) {
   return Array.from(new Set([normalizeProductImageUrl(primaryImage), ...additionalImages])).slice(0, 6);
 }
 
-function toProduct(record: ProductRecord): Product {
+export function productRecordToProduct(record: ProductRecord): Product {
   const stockQuantity = Math.max(0, Math.floor(Number(record.stock_quantity) || 0));
   const available = record.available !== false && stockQuantity > 0;
   const rawImageFields = {
@@ -211,13 +211,13 @@ export async function getProducts() {
   } catch {
     response = await supabaseProductsRequest("products?select=*&order=created_at.desc");
   }
-  return ((await response.json()) as ProductRecord[]).map(toProduct);
+  return ((await response.json()) as ProductRecord[]).map(productRecordToProduct);
 }
 
 export async function getProduct(id: string) {
   const response = await supabaseProductsRequest(`products?id=eq.${encodeURIComponent(id)}&select=*&limit=1`);
   const [product] = (await response.json()) as ProductRecord[];
-  return product ? toProduct(product) : undefined;
+  return product ? productRecordToProduct(product) : undefined;
 }
 
 export async function updateProductStock(id: string, quantity: number) {
@@ -234,7 +234,7 @@ export async function updateProductStock(id: string, quantity: number) {
     },
   );
   const [product] = (await response.json()) as ProductRecord[];
-  return product ? toProduct(product) : undefined;
+  return product ? productRecordToProduct(product) : undefined;
 }
 
 export async function insertProduct(product: Product) {
@@ -244,7 +244,7 @@ export async function insertProduct(product: Product) {
     body: JSON.stringify(toRecord(product)),
   });
   const [createdProduct] = (await response.json()) as ProductRecord[];
-  return createdProduct ? toProduct(createdProduct) : undefined;
+  return createdProduct ? productRecordToProduct(createdProduct) : undefined;
 }
 
 export async function replaceProduct(product: Product) {
@@ -257,7 +257,7 @@ export async function replaceProduct(product: Product) {
     },
   );
   const [updatedProduct] = (await response.json()) as ProductRecord[];
-  return updatedProduct ? toProduct(updatedProduct) : undefined;
+  return updatedProduct ? productRecordToProduct(updatedProduct) : undefined;
 }
 
 export async function removeProduct(id: string) {
@@ -281,7 +281,7 @@ export async function reserveProductStock(productId: string, quantity: number) {
   });
   const [product] = (await response.json()) as ProductRecord[];
   if (!product) throw new InsufficientStockError();
-  return toProduct(product);
+  return productRecordToProduct(product);
 }
 
 export async function restoreProductStock(productId: string, quantity: number) {
@@ -291,5 +291,5 @@ export async function restoreProductStock(productId: string, quantity: number) {
   });
   const [product] = (await response.json()) as ProductRecord[];
   if (!product) throw new Error("Produit introuvable pour restaurer le stock.");
-  return toProduct(product);
+  return productRecordToProduct(product);
 }

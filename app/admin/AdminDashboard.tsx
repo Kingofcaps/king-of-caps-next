@@ -4,7 +4,16 @@ import Link from "next/link";
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import type { Order, OrderItem, OrderStatus } from "@/app/lib/orders";
-import type { BoutiqueSale } from "@/app/lib/boutique-sales";
+import type { RecordShopSaleResult, ShopSale } from "@/app/lib/shop-sales";
+import {
+  openShopSale,
+  cancelShopSaleDraft,
+  SHOP_PAYMENT_METHODS,
+  shopSaleTotal,
+  submitShopSale as submitShopSaleDraft,
+  type ShopSaleDraft,
+} from "@/app/lib/shop-sale-workflow";
+import { isRevenueOrder, totalSalesCount } from "@/app/lib/sales-statistics";
 import { formatDualPrice, formatFcfaPrice } from "@/app/lib/prices";
 import { formatMoney, normalizeCurrency, SUPPORTED_CURRENCIES } from "@/app/lib/currency";
 import { generateClientId } from "@/app/lib/client-id";
@@ -131,13 +140,13 @@ function formatOrderAmount(order: Order) {
   return formatMoney(order.total_amount, normalizeCurrency(order.currency));
 }
 
-function formatSalesTotal(orders: Order[], boutiqueSales: BoutiqueSale[] = []) {
+function formatSalesTotal(orders: Order[], shopSales: ShopSale[] = []) {
   const totals = new Map(SUPPORTED_CURRENCIES.map((currency) => [currency, 0]));
   orders.forEach((order) => {
-    const currency = normalizeCurrency(order.currency);
-    totals.set(currency, (totals.get(currency) ?? 0) + order.total_amount);
+    const currency = normalizeCurrency(order.payment_currency);
+    totals.set(currency, (totals.get(currency) ?? 0) + order.payment_total_amount);
   });
-  totals.set("XOF", (totals.get("XOF") ?? 0) + boutiqueSales.reduce((total, sale) => total + sale.total_price, 0));
+  totals.set("XOF", (totals.get("XOF") ?? 0) + shopSales.reduce((total, sale) => total + sale.total_price, 0));
   return SUPPORTED_CURRENCIES.filter((currency) => (totals.get(currency) ?? 0) > 0)
     .map((currency) => formatMoney(totals.get(currency) ?? 0, currency)).join(" · ") || formatMoney(0, "XOF");
 }
@@ -198,7 +207,10 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
   const [restockQuantity, setRestockQuantity] = useState("");
   const [restockError, setRestockError] = useState("");
   const [orders, setOrders] = useState<Order[]>([]);
-  const [boutiqueSales, setBoutiqueSales] = useState<BoutiqueSale[]>([]);
+  const [shopSales, setShopSales] = useState<ShopSale[]>([]);
+  const [shopSaleDraft, setShopSaleDraft] = useState<ShopSaleDraft | null>(null);
+  const [shopSaleError, setShopSaleError] = useState("");
+  const [isRecordingShopSale, setIsRecordingShopSale] = useState(false);
   const [ordersError, setOrdersError] = useState("");
   const [ordersMessage, setOrdersMessage] = useState("");
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
@@ -273,7 +285,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     const today = dayKey(now);
     const weekStart = startOfWeek(now);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const revenueOrders = orders.filter((order) => order.order_status !== "cancelled" && (order.payment_status === "paid" || (order.payment_method === "cash_on_delivery" && order.order_status === "delivered")));
+    const revenueOrders = orders.filter(isRevenueOrder);
     const recentOrders = [...orders].sort((first, second) => new Date(second.created_at).getTime() - new Date(first.created_at).getTime()).slice(0, 10);
     const days = Array.from({ length: 30 }, (_, index) => {
       const date = new Date();
@@ -317,34 +329,36 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
       }
     });
 
-    boutiqueSales.forEach((boutiqueSale) => {
-      const index = dayIndex.get(dayKey(boutiqueSale.sold_at));
+    shopSales.forEach((shopSale) => {
+      const index = dayIndex.get(dayKey(shopSale.sold_at));
       if (index !== undefined) {
         days[index].orders += 1;
-        days[index].revenue += boutiqueSale.total_price;
+        days[index].revenue += shopSale.total_price;
       }
       addProductSale(
-        boutiqueSale.product_id,
-        boutiqueSale.product_name,
-        productImages.get(boutiqueSale.product_id) ?? "",
-        boutiqueSale.quantity,
-        boutiqueSale.total_price,
+        shopSale.product_id,
+        shopSale.product_name,
+        productImages.get(shopSale.product_id) ?? "",
+        shopSale.quantity,
+        shopSale.total_price,
       );
     });
 
-    const boutiqueSalesToday = boutiqueSales.filter((sale) => dayKey(sale.sold_at) === today);
-    const boutiqueSalesThisWeek = boutiqueSales.filter((sale) => new Date(sale.sold_at) >= weekStart);
-    const boutiqueSalesThisMonth = boutiqueSales.filter((sale) => new Date(sale.sold_at) >= monthStart);
+    const shopSalesToday = shopSales.filter((sale) => dayKey(sale.sold_at) === today);
+    const shopSalesThisWeek = shopSales.filter((sale) => new Date(sale.sold_at) >= weekStart);
+    const shopSalesThisMonth = shopSales.filter((sale) => new Date(sale.sold_at) >= monthStart);
     const revenueOrdersToday = revenueOrders.filter((order) => dayKey(order.created_at) === today);
     const revenueOrdersThisWeek = revenueOrders.filter((order) => new Date(order.created_at) >= weekStart);
     const revenueOrdersThisMonth = revenueOrders.filter((order) => new Date(order.created_at) >= monthStart);
 
     return {
-      totalRevenue: formatSalesTotal(revenueOrders, boutiqueSales),
-      revenueToday: formatSalesTotal(revenueOrdersToday, boutiqueSalesToday),
-      revenueThisWeek: formatSalesTotal(revenueOrdersThisWeek, boutiqueSalesThisWeek),
-      revenueThisMonth: formatSalesTotal(revenueOrdersThisMonth, boutiqueSalesThisMonth),
-      totalSales: revenueOrders.length + boutiqueSales.length,
+      totalRevenue: formatSalesTotal(revenueOrders, shopSales),
+      revenueToday: formatSalesTotal(revenueOrdersToday, shopSalesToday),
+      revenueThisWeek: formatSalesTotal(revenueOrdersThisWeek, shopSalesThisWeek),
+      revenueThisMonth: formatSalesTotal(revenueOrdersThisMonth, shopSalesThisMonth),
+      totalSales: totalSalesCount(orders, shopSales),
+      onlineSales: revenueOrders.length,
+      shopSales: shopSales.length,
       ordersToday: orders.filter((order) => dayKey(order.created_at) === today).length,
       pendingOrders: orders.filter((order) => order.order_status === "new" || order.order_status === "pending" || order.order_status === "awaiting_payment").length,
       deliveredOrders: orders.filter((order) => order.order_status === "delivered").length,
@@ -355,7 +369,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
       lowStock: products.filter((product) => product.stockQuantity >= 1 && product.stockQuantity <= 3),
       outOfStock: products.filter((product) => product.stockQuantity === 0),
     };
-  }, [boutiqueSales, orders, products]);
+  }, [orders, products, shopSales]);
 
   const playNewOrderSound = useCallback(async (force = false) => {
     if ((!isSoundEnabled && !force) || typeof window === "undefined") return;
@@ -404,14 +418,14 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
 
   const refreshOrders = useCallback(async () => {
     try {
-      const [ordersResponse, boutiqueSalesResponse] = await Promise.all([
+      const [ordersResponse, shopSalesResponse] = await Promise.all([
         fetch("/api/admin/orders", { cache: "no-store" }),
-        fetch("/api/admin/boutique-sales", { cache: "no-store" }),
+        fetch("/api/admin/shop-sales", { cache: "no-store" }),
       ]);
       const data = (await ordersResponse.json()) as Order[] & { error?: string };
-      const boutiqueData = (await boutiqueSalesResponse.json()) as BoutiqueSale[] & { error?: string };
+      const shopSalesData = (await shopSalesResponse.json()) as ShopSale[] & { error?: string };
       if (!ordersResponse.ok) throw new Error(data.error ?? "Impossible de charger les commandes.");
-      if (!boutiqueSalesResponse.ok) throw new Error(boutiqueData.error ?? "Impossible de charger les ventes boutique.");
+      if (!shopSalesResponse.ok) throw new Error(shopSalesData.error ?? "Impossible de charger les ventes boutique.");
 
       if (!hasLoadedInitialOrdersRef.current) {
         knownOrderIdsRef.current = new Set(data.map((order) => order.id));
@@ -420,7 +434,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
         data.forEach((order) => announceNewOrder(order.id, order.order_number));
       }
       setOrders(data);
-      setBoutiqueSales(boutiqueData);
+      setShopSales(shopSalesData);
       setOrdersError("");
     } catch (error) {
       setOrdersError(error instanceof Error ? error.message : "Impossible de charger les commandes.");
@@ -844,7 +858,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     setUpdatingStockIds(new Set(updatingStockIdsRef.current));
   }
 
-  async function updateStock(product: Product, quantity: number, movementType: "increase" | "decrease" | "restock", successMessage: string) {
+  async function updateStock(product: Product, quantity: number, movementType: "increase" | "restock", successMessage: string) {
     if (updatingStockIdsRef.current.has(product.id)) return false;
 
     const stockQuantity = Math.max(0, Math.floor(quantity));
@@ -880,15 +894,62 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     }
   }
 
-  async function changeStock(product: Product, change: -1 | 1) {
-    const stockQuantity = Math.max(0, product.stockQuantity + change);
-    if (stockQuantity === product.stockQuantity) return;
+  async function increaseStock(product: Product) {
     await updateStock(
       product,
-      stockQuantity,
-      change === 1 ? "increase" : "decrease",
+      product.stockQuantity + 1,
+      "increase",
       `Stock de ${product.name} mis à jour.`,
     );
+  }
+
+  function openShopSalePopup(product: Product) {
+    setShopSaleDraft(openShopSale(product, crypto.randomUUID()));
+    setShopSaleError("");
+    setMessage("");
+  }
+
+  function cancelShopSale() {
+    if (isRecordingShopSale) return;
+    setShopSaleDraft(cancelShopSaleDraft());
+    setShopSaleError("");
+  }
+
+  async function recordShopSale(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!shopSaleDraft || isRecordingShopSale) return;
+
+    setShopSaleError("");
+    setMessage("");
+    setIsRecordingShopSale(true);
+
+    try {
+      const result = await submitShopSaleDraft(shopSaleDraft, async (draft) => readResponse<RecordShopSaleResult>(
+        await fetch("/api/admin/shop-sales", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            productId: draft.productId,
+            quantity: draft.quantity,
+            unitPrice: draft.unitPrice,
+            paymentMethod: draft.paymentMethod,
+            requestId: draft.requestId,
+          }),
+        }),
+      ));
+
+      setProducts((current) => current.map((product) => product.id === result.product.id ? result.product : product));
+      setEditing((current) => current?.id === result.product.id ? result.product : current);
+      if (result.created) setShopSales((current) => [result.sale, ...current]);
+      setShopSaleDraft(null);
+      setMessage(result.created
+        ? `Vente enregistrée : ${result.sale.quantity} × ${formatMoney(result.sale.unit_price, "XOF")} pour ${result.sale.product_name}.`
+        : "Cette vente avait déjà été enregistrée. Aucun stock supplémentaire n’a été retiré.");
+    } catch (error) {
+      setShopSaleError(error instanceof Error ? error.message : "Impossible d’enregistrer la vente boutique.");
+    } finally {
+      setIsRecordingShopSale(false);
+    }
   }
 
   function openRestockPopup(product: Product) {
@@ -1076,6 +1137,8 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
               <DashboardStat label="Produits en rupture" value={dashboard.outOfStock.length} tone="red" />
               <DashboardStat label="Total commandes" value={orders.length} />
               <DashboardStat label="Total ventes" value={dashboard.totalSales} tone="green" />
+              <DashboardStat label="Ventes boutique" value={dashboard.shopSales} tone="gold" />
+              <DashboardStat label="Ventes en ligne" value={dashboard.onlineSales} tone="blue" />
               <DashboardStat label="Commandes aujourd’hui" value={dashboard.ordersToday} tone="gold" />
               <DashboardStat label="Chiffre d’affaires aujourd’hui" value={dashboard.revenueToday} tone="gold" />
               <DashboardStat label="Chiffre d’affaires cette semaine" value={dashboard.revenueThisWeek} tone="gold" />
@@ -1231,8 +1294,8 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
                       {product.newArrival && <span className="rounded-full bg-zinc-100 px-2 py-1 text-zinc-700">Nouveau</span>}
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2">
-                      <button type="button" disabled={updatingStockIds.has(product.id) || product.stockQuantity === 0} onClick={() => changeStock(product, -1)} aria-label={`Diminuer le stock de ${product.name} de 1`} className="rounded-xl border border-[#e5e5e5] bg-white px-2 py-2 text-xs font-black text-zinc-700 transition hover:border-orange-300 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-40">➖ −1</button>
-                      <button type="button" disabled={updatingStockIds.has(product.id)} onClick={() => changeStock(product, 1)} aria-label={`Augmenter le stock de ${product.name} de 1`} className="rounded-xl border border-[#e5e5e5] bg-white px-2 py-2 text-xs font-black text-zinc-700 transition hover:border-green-300 hover:bg-green-50 disabled:cursor-wait disabled:opacity-40">➕ +1</button>
+                      <button type="button" disabled={updatingStockIds.has(product.id) || product.stockQuantity === 0} onClick={() => openShopSalePopup(product)} aria-label={`Enregistrer une vente boutique de ${product.name}`} className="rounded-xl border border-[#e5e5e5] bg-white px-2 py-2 text-xs font-black text-zinc-700 transition hover:border-orange-300 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-40">➖ −1</button>
+                      <button type="button" disabled={updatingStockIds.has(product.id)} onClick={() => increaseStock(product)} aria-label={`Augmenter le stock de ${product.name} de 1`} className="rounded-xl border border-[#e5e5e5] bg-white px-2 py-2 text-xs font-black text-zinc-700 transition hover:border-green-300 hover:bg-green-50 disabled:cursor-wait disabled:opacity-40">➕ +1</button>
                       <button type="button" disabled={updatingStockIds.has(product.id)} onClick={() => openRestockPopup(product)} className="col-span-2 rounded-xl border border-[#c9a227]/40 bg-amber-50 px-3 py-2 text-xs font-black text-[#a8861e] transition hover:border-[#c9a227] disabled:cursor-wait disabled:opacity-40">Réapprovisionner</button>
                     </div>
                     <div className="mt-3 flex gap-2">
@@ -1309,6 +1372,73 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
             <div className="mt-6 flex justify-end gap-3">
               <button type="button" disabled={updatingStockIds.has(restockingProduct.id)} onClick={() => setRestockingProduct(null)} className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-2.5 text-sm font-bold text-zinc-700 transition hover:border-zinc-400 disabled:opacity-50">Annuler</button>
               <button type="submit" disabled={updatingStockIds.has(restockingProduct.id)} className="rounded-xl bg-black px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#c9a227] disabled:cursor-wait disabled:opacity-60">{updatingStockIds.has(restockingProduct.id) ? "Mise à jour…" : "Enregistrer"}</button>
+            </div>
+          </form>
+        </div>
+      )}
+      {view === "products" && shopSaleDraft && (
+        <div className="fixed inset-0 z-[65] flex items-center justify-center bg-black/40 p-5 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="shop-sale-title">
+          <form onSubmit={recordShopSale} className="w-full max-w-lg rounded-2xl border border-[#e5e5e5] bg-white p-6 shadow-2xl">
+            <p className="text-sm font-bold tracking-[0.2em] text-[#c9a227]">VENTE BOUTIQUE</p>
+            <h2 id="shop-sale-title" className="mt-2 text-2xl font-black">Enregistrer une vente en boutique</h2>
+
+            <dl className="mt-5 rounded-xl border border-[#e5e5e5] bg-[#fafafa] p-4">
+              <dt className="text-xs font-bold uppercase tracking-wide text-zinc-500">Produit concerné</dt>
+              <dd className="mt-1 font-black text-zinc-900">{shopSaleDraft.productName}</dd>
+              <dd className="mt-1 text-sm font-semibold text-zinc-500">Stock disponible : {shopSaleDraft.availableStock}</dd>
+            </dl>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <label className="text-sm font-bold text-zinc-700">
+                <span className="mb-2 block">Quantité vendue</span>
+                <input
+                  type="number"
+                  min="1"
+                  max={shopSaleDraft.availableStock}
+                  step="1"
+                  required
+                  autoFocus
+                  value={shopSaleDraft.quantity}
+                  onChange={(event) => setShopSaleDraft((current) => current ? { ...current, quantity: Number(event.target.value) } : current)}
+                  className={fieldClassName}
+                />
+              </label>
+              <label className="text-sm font-bold text-zinc-700">
+                <span className="mb-2 block">Prix unitaire (F CFA)</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  required
+                  value={shopSaleDraft.unitPrice}
+                  onChange={(event) => setShopSaleDraft((current) => current ? { ...current, unitPrice: Number(event.target.value) } : current)}
+                  className={fieldClassName}
+                />
+              </label>
+            </div>
+
+            <label className="mt-4 block text-sm font-bold text-zinc-700">
+              <span className="mb-2 block">Mode de paiement</span>
+              <select
+                required
+                value={shopSaleDraft.paymentMethod}
+                onChange={(event) => setShopSaleDraft((current) => current ? { ...current, paymentMethod: event.target.value as ShopSaleDraft["paymentMethod"] } : current)}
+                className={fieldClassName}
+              >
+                {SHOP_PAYMENT_METHODS.map((method) => <option key={method} value={method}>{method}</option>)}
+              </select>
+            </label>
+
+            <div className="mt-5 flex items-center justify-between rounded-xl bg-black px-4 py-4 text-white">
+              <span className="text-sm font-bold">Montant total</span>
+              <strong className="text-xl">{formatMoney(shopSaleTotal(shopSaleDraft), "XOF")}</strong>
+            </div>
+
+            {shopSaleError && <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{shopSaleError}</p>}
+
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button type="button" disabled={isRecordingShopSale} onClick={cancelShopSale} className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-2.5 text-sm font-bold text-zinc-700 transition hover:border-zinc-400 disabled:opacity-50">Annuler</button>
+              <button type="submit" disabled={isRecordingShopSale} className="rounded-xl bg-black px-4 py-2.5 text-sm font-black text-white transition hover:bg-[#c9a227] disabled:cursor-wait disabled:opacity-60">{isRecordingShopSale ? "Enregistrement…" : "Enregistrer la vente"}</button>
             </div>
           </form>
         </div>

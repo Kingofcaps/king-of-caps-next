@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { ADMIN_COOKIE, isAdminToken } from "@/app/lib/admin-auth";
 import { getProduct, updateProductStock } from "@/app/lib/products";
-import { recordStockMovementSafely, type StockMovementType } from "@/app/lib/stock-movements";
+import { recordStockMovementSafely } from "@/app/lib/stock-movements";
 
 export const runtime = "nodejs";
 
@@ -18,7 +18,7 @@ export async function PATCH(
   if (typeof stockQuantity !== "number" || !Number.isFinite(stockQuantity)) {
     return NextResponse.json({ error: "Quantité de stock invalide." }, { status: 400 });
   }
-  if (movementType !== "increase" && movementType !== "decrease" && movementType !== "restock") {
+  if (movementType !== "increase" && movementType !== "restock") {
     return NextResponse.json({ error: "Type de mouvement invalide." }, { status: 400 });
   }
 
@@ -36,7 +36,7 @@ export async function PATCH(
       await recordStockMovementSafely({
         productId: product.id,
         productName: product.name,
-        movementType: movementType as StockMovementType,
+        movementType,
         quantityChange: product.stockQuantity - previousProduct.stockQuantity,
         previousQuantity: previousProduct.stockQuantity,
         newQuantity: product.stockQuantity,
