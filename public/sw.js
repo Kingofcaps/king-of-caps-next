@@ -12,8 +12,10 @@ self.addEventListener("push", (event) => {
   const title = typeof payload.title === "string" && payload.title.trim()
     ? payload.title.trim()
     : "KING OF CAPS";
-  const message = typeof payload.message === "string" && payload.message.trim()
-    ? payload.message.trim()
+  const message = typeof payload.body === "string" && payload.body.trim()
+    ? payload.body.trim()
+    : typeof payload.message === "string" && payload.message.trim()
+      ? payload.message.trim()
     : "Une nouveauté vous attend chez KING OF CAPS.";
 
   let targetUrl = "/";

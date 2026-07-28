@@ -19,7 +19,15 @@ export function getWebPushClient() {
     throw new Error("VAPID_SUBJECT doit commencer par mailto: ou https://.");
   }
 
+  console.info("[push][vapid] Initialisation de web-push.", {
+    publicKeyPresent: Boolean(publicKey),
+    publicKeyLength: publicKey.length,
+    privateKeyPresent: Boolean(privateKey),
+    privateKeyLength: privateKey.length,
+    subject,
+  });
   webPush.setVapidDetails(subject, publicKey, privateKey);
   configured = true;
+  console.info("[push][vapid] web-push initialisé avec succès.");
   return webPush;
 }
