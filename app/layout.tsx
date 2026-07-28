@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Analytics } from "@vercel/analytics/next";
 import { CartProvider } from "./components/CartProvider";
 import { CurrencyProvider } from "./components/CurrencyProvider";
+import { FavoritesProvider } from "./components/FavoritesProvider";
+import PwaInstallationTracker from "./components/PwaInstallationTracker";
 import { getRequestCurrency } from "./lib/currency-server";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "./lib/seo";
 import "./globals.css";
@@ -96,7 +98,10 @@ export default async function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <CurrencyProvider initialCurrency={initialCurrency}>
-          <CartProvider>{children}</CartProvider>
+          <FavoritesProvider>
+            <CartProvider>{children}</CartProvider>
+            <PwaInstallationTracker />
+          </FavoritesProvider>
         </CurrencyProvider>
         <Analytics />
       </body>

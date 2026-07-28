@@ -9,6 +9,7 @@ import ProductCardImage from "./ProductCardImage";
 import ProductCardPrice from "./ProductCardPrice";
 import TrendingProducts from "./TrendingProducts";
 import { useCurrency } from "./CurrencyProvider";
+import FavoriteButton from "./FavoriteButton";
 
 const WHATSAPP_URL = "https://wa.me/22950687515";
 
@@ -57,12 +58,12 @@ export default function ProductGallery({ products }: { products: Product[] }) {
           {filteredProducts.map((product, index) => (
             <ProductReveal key={product.id} index={index}>
               <article className="group h-full overflow-hidden rounded-[18px] border border-[#e5e5e5] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.06)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_14px_32px_rgba(0,0,0,0.1)]">
-              <Link
-                href={`/product/${product.id}`}
-                className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
-                aria-label={`Voir ${product.name}`}
-              >
-                <div className="relative aspect-[4/5] overflow-hidden rounded-t-[18px] bg-zinc-100">
+              <div className="relative aspect-[4/5] overflow-hidden rounded-t-[18px] bg-zinc-100">
+                <Link
+                  href={`/product/${product.id}`}
+                  className="block h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+                  aria-label={`Voir ${product.name}`}
+                >
                   <ProductCardImage
                     src={product.image}
                     alt={product.name}
@@ -73,8 +74,9 @@ export default function ProductGallery({ products }: { products: Product[] }) {
                       {product.images.length} photos
                     </span>
                   )}
-                </div>
-              </Link>
+                </Link>
+                <FavoriteButton productId={product.id} productName={product.name} />
+              </div>
               <div className="p-2.5 sm:p-4">
                 <Link
                   href={`/product/${product.id}`}

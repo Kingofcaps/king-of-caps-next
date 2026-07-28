@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import CartLink from "./CartLink";
 import CurrencySelector from "./CurrencySelector";
+import FavoritesLink from "./FavoritesLink";
 
 const WHATSAPP_URL = "https://wa.me/22950687515";
 
@@ -39,6 +40,7 @@ export default function HomeHeader() {
         </span>
         <div className="flex shrink-0 items-center gap-2">
           <CurrencySelector />
+          <FavoritesLink />
           <CartLink />
           <button
             type="button"
@@ -56,7 +58,7 @@ export default function HomeHeader() {
             href={WHATSAPP_URL}
             target="_blank"
             rel="noreferrer"
-            className="whitespace-nowrap rounded-full bg-black px-5 py-2 text-xs font-semibold text-white transition hover:bg-[#c9a227] sm:text-sm"
+            className="hidden whitespace-nowrap rounded-full bg-black px-5 py-2 text-xs font-semibold text-white transition hover:bg-[#c9a227] sm:inline-flex sm:text-sm"
           >
             WhatsApp
           </a>

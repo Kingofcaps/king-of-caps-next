@@ -7,34 +7,36 @@ import type { Product } from "@/app/lib/products";
 import styles from "./TrendingProducts.module.css";
 import ProductCardImage from "./ProductCardImage";
 import ProductCardPrice from "./ProductCardPrice";
+import FavoriteButton from "./FavoriteButton";
 
 function TrendingCard({ product, duplicate = false }: { product: Product; duplicate?: boolean }) {
   return (
-    <Link
-      href={`/product/${product.id}`}
-      tabIndex={duplicate ? -1 : undefined}
+    <article
       className={`${styles.card} group w-[calc((100vw-4.5rem)/2.2)] min-w-32 max-w-44 shrink-0 border border-[#e5e5e5] bg-white shadow-[0_5px_16px_rgba(0,0,0,0.05)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(0,0,0,0.08)] md:w-44 md:max-w-none lg:w-48`}
-      aria-label={`Voir ${product.name}`}
+      aria-hidden={duplicate ? true : undefined}
     >
       <div className="relative aspect-square overflow-hidden bg-zinc-100">
-        <ProductCardImage
-          src={product.image}
-          alt={product.name}
-          className="object-cover object-center"
-        />
-        {product.images.length > 1 && (
-          <span className="absolute bottom-2 right-2 rounded-full bg-black/65 px-2 py-1 text-[10px] font-bold text-white shadow-sm backdrop-blur-sm">
-            {product.images.length} photos
-          </span>
-        )}
+        <Link href={`/product/${product.id}`} tabIndex={duplicate ? -1 : undefined} className="block h-full" aria-label={`Voir ${product.name}`}>
+          <ProductCardImage
+            src={product.image}
+            alt={product.name}
+            className="object-cover object-center"
+          />
+          {product.images.length > 1 && (
+            <span className="absolute bottom-2 right-2 rounded-full bg-black/65 px-2 py-1 text-[10px] font-bold text-white shadow-sm backdrop-blur-sm">
+              {product.images.length} photos
+            </span>
+          )}
+        </Link>
+        {!duplicate && <FavoriteButton productId={product.id} productName={product.name} />}
       </div>
       <div className="px-2 pb-1.5 pt-1.5 sm:pb-2 sm:pt-2">
         <ProductCardPrice prices={product} inStock={product.inStock} />
-        <span className="block text-[10px] font-black tracking-[0.1em] text-[#c9a227] transition group-hover:text-black sm:text-xs">
+        <Link href={`/product/${product.id}`} tabIndex={duplicate ? -1 : undefined} className="block text-[10px] font-black tracking-[0.1em] text-[#c9a227] transition group-hover:text-black sm:text-xs">
           VOIR &gt;
-        </span>
+        </Link>
       </div>
-    </Link>
+    </article>
   );
 }
 

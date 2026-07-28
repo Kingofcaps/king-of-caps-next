@@ -11,6 +11,7 @@ import type { Product } from "@/app/lib/products";
 import CampaignLinkGenerator from "./CampaignLinkGenerator";
 import ProductImage from "@/app/components/ProductImage";
 import { exportOrdersPdf, exportOrdersXlsx, filterOrdersForExport, totalExportRevenue, type ExportDateFilter } from "./orderExports";
+import PwaInstallationsPanel from "./PwaInstallationsPanel";
 
 type ProductForm = Omit<Product, "id" | "image" | "images" | "inStock" | "sortOrder" | "createdAt">;
 type BulkProductRow = {
@@ -1020,6 +1021,8 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
               <DashboardStat label="Commandes annulées" value={dashboard.cancelledOrders} tone="red" />
             </div>
           </section>
+
+          <PwaInstallationsPanel />
 
           <CampaignLinkGenerator products={products.map(({ id, name }) => ({ id, name }))} />
 
