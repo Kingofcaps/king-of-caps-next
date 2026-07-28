@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import type { Order, OrderItem, OrderStatus } from "@/app/lib/orders";
+import type { BoutiqueSale } from "@/app/lib/boutique-sales";
 import { formatDualPrice, formatFcfaPrice } from "@/app/lib/prices";
 import { formatMoney, normalizeCurrency, SUPPORTED_CURRENCIES } from "@/app/lib/currency";
 import { generateClientId } from "@/app/lib/client-id";
@@ -130,12 +131,13 @@ function formatOrderAmount(order: Order) {
   return formatMoney(order.total_amount, normalizeCurrency(order.currency));
 }
 
-function formatOrdersTotal(orders: Order[]) {
+function formatSalesTotal(orders: Order[], boutiqueSales: BoutiqueSale[] = []) {
   const totals = new Map(SUPPORTED_CURRENCIES.map((currency) => [currency, 0]));
   orders.forEach((order) => {
     const currency = normalizeCurrency(order.currency);
     totals.set(currency, (totals.get(currency) ?? 0) + order.total_amount);
   });
+  totals.set("XOF", (totals.get("XOF") ?? 0) + boutiqueSales.reduce((total, sale) => total + sale.total_price, 0));
   return SUPPORTED_CURRENCIES.filter((currency) => (totals.get(currency) ?? 0) > 0)
     .map((currency) => formatMoney(totals.get(currency) ?? 0, currency)).join(" · ") || formatMoney(0, "XOF");
 }
@@ -164,6 +166,12 @@ function dayLabel(value: Date) {
   return new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" }).format(value);
 }
 
+function startOfWeek(value: Date) {
+  const date = new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+  return date;
+}
+
 export default function AdminDashboard({ initialProducts, view }: { initialProducts: Product[]; view: AdminView }) {
   const [products, setProducts] = useState(initialProducts);
   const [newProduct, setNewProduct] = useState<ProductForm>(emptyProduct);
@@ -190,6 +198,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
   const [restockQuantity, setRestockQuantity] = useState("");
   const [restockError, setRestockError] = useState("");
   const [orders, setOrders] = useState<Order[]>([]);
+  const [boutiqueSales, setBoutiqueSales] = useState<BoutiqueSale[]>([]);
   const [ordersError, setOrdersError] = useState("");
   const [ordersMessage, setOrdersMessage] = useState("");
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
@@ -260,7 +269,10 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
   }, [orders, ordersDateFilter, ordersFilter, ordersSearch, ordersSort]);
   const ordersForExport = useMemo(() => filterOrdersForExport(orders, exportDateFilter, exportStartDate, exportEndDate), [exportDateFilter, exportEndDate, exportStartDate, orders]);
   const dashboard = useMemo(() => {
-    const today = dayKey(new Date());
+    const now = new Date();
+    const today = dayKey(now);
+    const weekStart = startOfWeek(now);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const revenueOrders = orders.filter((order) => order.order_status !== "cancelled" && (order.payment_status === "paid" || (order.payment_method === "cash_on_delivery" && order.order_status === "delivered")));
     const recentOrders = [...orders].sort((first, second) => new Date(second.created_at).getTime() - new Date(first.created_at).getTime()).slice(0, 10);
     const days = Array.from({ length: 30 }, (_, index) => {
@@ -271,24 +283,68 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     });
     const dayIndex = new Map(days.map((day, index) => [day.key, index]));
     const sales = new Map<string, { name: string; image: string; quantity: number; revenue: number }>();
+    const productImages = new Map(products.map((product) => [product.id, product.image]));
 
-    orders.forEach((order) => {
+    function addProductSale(productId: string, name: string, image: string, quantity: number, revenue: number) {
+      const sale = sales.get(productId) ?? { name, image, quantity: 0, revenue: 0 };
+      sale.quantity += quantity;
+      sale.revenue += revenue;
+      sales.set(productId, sale);
+    }
+
+    revenueOrders.forEach((order) => {
       const index = dayIndex.get(dayKey(order.created_at));
       if (index !== undefined) {
         days[index].orders += 1;
-        if (order.order_status !== "cancelled" && normalizeCurrency(order.payment_currency) === "XOF" && (order.payment_status === "paid" || (order.payment_method === "cash_on_delivery" && order.order_status === "delivered"))) days[index].revenue += order.payment_total_amount;
+        if (normalizeCurrency(order.payment_currency) === "XOF") days[index].revenue += order.payment_total_amount;
       }
-      if (order.order_status !== "cancelled") {
-        const sale = sales.get(order.product_id) ?? { name: order.product_name, image: order.product_image, quantity: 0, revenue: 0 };
-        sale.quantity += order.quantity;
-        if (normalizeCurrency(order.payment_currency) === "XOF") sale.revenue += order.payment_total_amount;
-        sales.set(order.product_id, sale);
+      if (Array.isArray(order.order_items) && order.order_items.length > 0) {
+        order.order_items.forEach((item) => addProductSale(
+          item.product_id,
+          item.product_name,
+          item.product_image,
+          item.quantity,
+          normalizeCurrency(item.currency) === "XOF" ? item.line_total : 0,
+        ));
+      } else {
+        addProductSale(
+          order.product_id,
+          order.product_name,
+          order.product_image,
+          order.quantity,
+          normalizeCurrency(order.payment_currency) === "XOF" ? order.payment_total_amount : 0,
+        );
       }
     });
 
+    boutiqueSales.forEach((boutiqueSale) => {
+      const index = dayIndex.get(dayKey(boutiqueSale.sold_at));
+      if (index !== undefined) {
+        days[index].orders += 1;
+        days[index].revenue += boutiqueSale.total_price;
+      }
+      addProductSale(
+        boutiqueSale.product_id,
+        boutiqueSale.product_name,
+        productImages.get(boutiqueSale.product_id) ?? "",
+        boutiqueSale.quantity,
+        boutiqueSale.total_price,
+      );
+    });
+
+    const boutiqueSalesToday = boutiqueSales.filter((sale) => dayKey(sale.sold_at) === today);
+    const boutiqueSalesThisWeek = boutiqueSales.filter((sale) => new Date(sale.sold_at) >= weekStart);
+    const boutiqueSalesThisMonth = boutiqueSales.filter((sale) => new Date(sale.sold_at) >= monthStart);
+    const revenueOrdersToday = revenueOrders.filter((order) => dayKey(order.created_at) === today);
+    const revenueOrdersThisWeek = revenueOrders.filter((order) => new Date(order.created_at) >= weekStart);
+    const revenueOrdersThisMonth = revenueOrders.filter((order) => new Date(order.created_at) >= monthStart);
+
     return {
-      totalRevenue: formatOrdersTotal(revenueOrders),
-      revenueToday: formatOrdersTotal(revenueOrders.filter((order) => dayKey(order.created_at) === today)),
+      totalRevenue: formatSalesTotal(revenueOrders, boutiqueSales),
+      revenueToday: formatSalesTotal(revenueOrdersToday, boutiqueSalesToday),
+      revenueThisWeek: formatSalesTotal(revenueOrdersThisWeek, boutiqueSalesThisWeek),
+      revenueThisMonth: formatSalesTotal(revenueOrdersThisMonth, boutiqueSalesThisMonth),
+      totalSales: revenueOrders.length + boutiqueSales.length,
       ordersToday: orders.filter((order) => dayKey(order.created_at) === today).length,
       pendingOrders: orders.filter((order) => order.order_status === "new" || order.order_status === "pending" || order.order_status === "awaiting_payment").length,
       deliveredOrders: orders.filter((order) => order.order_status === "delivered").length,
@@ -299,7 +355,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
       lowStock: products.filter((product) => product.stockQuantity >= 1 && product.stockQuantity <= 3),
       outOfStock: products.filter((product) => product.stockQuantity === 0),
     };
-  }, [orders, products]);
+  }, [boutiqueSales, orders, products]);
 
   const playNewOrderSound = useCallback(async (force = false) => {
     if ((!isSoundEnabled && !force) || typeof window === "undefined") return;
@@ -348,9 +404,14 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
 
   const refreshOrders = useCallback(async () => {
     try {
-      const response = await fetch("/api/admin/orders", { cache: "no-store" });
-      const data = (await response.json()) as Order[] & { error?: string };
-      if (!response.ok) throw new Error(data.error ?? "Impossible de charger les commandes.");
+      const [ordersResponse, boutiqueSalesResponse] = await Promise.all([
+        fetch("/api/admin/orders", { cache: "no-store" }),
+        fetch("/api/admin/boutique-sales", { cache: "no-store" }),
+      ]);
+      const data = (await ordersResponse.json()) as Order[] & { error?: string };
+      const boutiqueData = (await boutiqueSalesResponse.json()) as BoutiqueSale[] & { error?: string };
+      if (!ordersResponse.ok) throw new Error(data.error ?? "Impossible de charger les commandes.");
+      if (!boutiqueSalesResponse.ok) throw new Error(boutiqueData.error ?? "Impossible de charger les ventes boutique.");
 
       if (!hasLoadedInitialOrdersRef.current) {
         knownOrderIdsRef.current = new Set(data.map((order) => order.id));
@@ -359,6 +420,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
         data.forEach((order) => announceNewOrder(order.id, order.order_number));
       }
       setOrders(data);
+      setBoutiqueSales(boutiqueData);
       setOrdersError("");
     } catch (error) {
       setOrdersError(error instanceof Error ? error.message : "Impossible de charger les commandes.");
@@ -1013,8 +1075,11 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
               <DashboardStat label="Produits en stock" value={products.filter((product) => product.stockQuantity > 0).length} tone="green" />
               <DashboardStat label="Produits en rupture" value={dashboard.outOfStock.length} tone="red" />
               <DashboardStat label="Total commandes" value={orders.length} />
+              <DashboardStat label="Total ventes" value={dashboard.totalSales} tone="green" />
               <DashboardStat label="Commandes aujourd’hui" value={dashboard.ordersToday} tone="gold" />
               <DashboardStat label="Chiffre d’affaires aujourd’hui" value={dashboard.revenueToday} tone="gold" />
+              <DashboardStat label="Chiffre d’affaires cette semaine" value={dashboard.revenueThisWeek} tone="gold" />
+              <DashboardStat label="Chiffre d’affaires ce mois" value={dashboard.revenueThisMonth} tone="gold" />
               <DashboardStat label="Chiffre d’affaires total" value={dashboard.totalRevenue} tone="gold" />
               <DashboardStat label="Commandes en attente" value={dashboard.pendingOrders} tone="blue" />
               <DashboardStat label="Commandes livrées" value={dashboard.deliveredOrders} tone="green" />
@@ -1028,7 +1093,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
 
           <section className="grid gap-5 xl:grid-cols-3">
             <DashboardChart title="Règlements XOF — 30 derniers jours" values={dashboard.days.map((day) => day.revenue)} labels={dashboard.days.map((day) => day.label)} valueFormatter={(value) => formatMoney(value, "XOF")} />
-            <DashboardChart title="Commandes — 30 derniers jours" values={dashboard.days.map((day) => day.orders)} labels={dashboard.days.map((day) => day.label)} valueFormatter={(value) => `${value} commande${value > 1 ? "s" : ""}`} />
+            <DashboardChart title="Ventes — 30 derniers jours" values={dashboard.days.map((day) => day.orders)} labels={dashboard.days.map((day) => day.label)} valueFormatter={(value) => `${value} vente${value > 1 ? "s" : ""}`} />
             <section className="rounded-2xl border border-[#e5e5e5] bg-white p-5 shadow-sm"><h3 className="font-black">Produits les plus vendus</h3><div className="mt-5 space-y-3">{dashboard.bestSelling.length > 0 ? dashboard.bestSelling.map((product, index) => <div key={`${product.name}-${index}`} className="flex items-center gap-3 rounded-xl bg-[#fafafa] p-3"><div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-zinc-100"><ProductImage src={product.image} alt="" fill sizes="40px" className="object-cover" /></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-zinc-800">{index + 1}. {product.name}</p><p className="mt-0.5 text-xs font-semibold text-zinc-500">{product.quantity} vendue{product.quantity > 1 ? "s" : ""}</p></div><span className="shrink-0 text-sm font-black text-[#c9a227]">{formatDualPrice(product.revenue)}</span></div>) : <p className="text-sm text-zinc-500">Aucune vente enregistrée.</p>}</div><div className="mt-5 border-t border-[#e5e5e5] pt-4"><p className="text-sm font-bold text-zinc-800">Produits les plus vus</p><p className="mt-1 text-sm text-zinc-500">Données de vues indisponibles.</p></div></section>
           </section>
 

@@ -19,6 +19,7 @@ export type StockMovement = {
   previous_quantity: number;
   new_quantity: number;
   note: string | null;
+  migrated_to_boutique_sale_at: string | null;
   created_at: string;
 };
 
