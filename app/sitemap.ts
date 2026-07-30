@@ -21,6 +21,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 1,
       images: [absoluteUrl("/images/boutique.jpg")],
     },
+    ...[
+      "/cgu",
+      "/politique-confidentialite",
+      "/mentions-legales",
+      "/livraison-retours",
+    ].map((path) => ({
+      url: absoluteUrl(path),
+      changeFrequency: "yearly" as const,
+      priority: 0.4,
+    })),
     ...products.map((product) => ({
       url: absoluteUrl(`/product/${product.id}`),
       changeFrequency: "weekly" as const,
