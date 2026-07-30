@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { after, NextResponse } from "next/server";
 import { cookies } from "next/headers";
@@ -10,7 +9,8 @@ import {
   type Product,
 } from "@/app/lib/products";
 import { recordStockMovementSafely } from "@/app/lib/stock-movements";
-import { deleteProductImages, uploadProductImage } from "@/app/lib/product-images";
+import { getProductImageStoragePath } from "@/app/lib/product-images";
+import type { ProductCreatePayload } from "@/app/lib/product-create-payload";
 import { sendNewProductPushNotification } from "@/app/lib/push-notifications";
 
 export const runtime = "nodejs";
@@ -23,19 +23,33 @@ function unauthorized() {
   return NextResponse.json({ error: "Non autorisé." }, { status: 401 });
 }
 
-function getText(formData: FormData, key: string) {
-  const value = formData.get(key);
+function getText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function getQuantity(formData: FormData) {
-  const value = Number(getText(formData, "stockQuantity"));
-  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+function getQuantity(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
 }
 
-function getMoney(formData: FormData, key: string) {
-  const value = Number(getText(formData, key).replace(",", "."));
-  return Number.isFinite(value) && value >= 0 ? value : 0;
+function getMoney(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function validateImageUrls(payload: Partial<ProductCreatePayload>) {
+  const image = getText(payload.image);
+  const images = Array.isArray(payload.images)
+    ? payload.images.filter((url): url is string => typeof url === "string")
+    : [];
+  if (!image || images.length === 0 || images[0] !== image) {
+    throw new Error("Une image principale téléversée est obligatoire.");
+  }
+  if (images.length > 6) throw new Error("Vous pouvez ajouter jusqu’à 5 images supplémentaires.");
+  if (images.some((url) => !getProductImageStoragePath(url))) {
+    throw new Error("Toutes les images doivent provenir du bucket product-images.");
+  }
+  return Array.from(new Set(images));
 }
 
 export async function GET() {
@@ -46,42 +60,29 @@ export async function GET() {
 export async function POST(request: Request) {
   if (!(await isAuthorized())) return unauthorized();
 
-  const uploadedUrls: string[] = [];
   try {
-    const formData = await request.formData();
-    const name = getText(formData, "name");
-    const price = getText(formData, "price");
-    const priceXof = Math.round(getMoney(formData, "priceXof") || Number(price.replace(/[^0-9]/g, "")));
-    const priceEur = Math.round(getMoney(formData, "priceEur") * 100);
-    const priceUsd = Math.round(getMoney(formData, "priceUsd") * 100);
-    const description = getText(formData, "description");
-    const primaryFile = formData.get("image");
-    const additionalFiles = formData
-      .getAll("images")
-      .filter((file): file is File => file instanceof File && file.size > 0);
+    if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+      return NextResponse.json({ error: "La création produit accepte uniquement un petit payload JSON d’URL." }, { status: 415 });
+    }
+    const payload = await request.json() as Partial<ProductCreatePayload>;
+    const productId = getText(payload.id);
+    const name = getText(payload.name);
+    const price = getText(payload.price);
+    const priceXof = Math.round(getMoney(payload.priceXof) || Number(price.replace(/[^0-9]/g, "")));
+    const priceEur = Math.round(getMoney(payload.priceEur));
+    const priceUsd = Math.round(getMoney(payload.priceUsd));
+    const images = validateImageUrls(payload);
 
+    if (!/^[a-zA-Z0-9_-]{1,128}$/.test(productId)) {
+      return NextResponse.json({ error: "L’identifiant du produit est invalide." }, { status: 400 });
+    }
     if (!name || !Number.isFinite(priceXof) || priceXof < 1 || priceEur < 1 || priceUsd < 1) {
       return NextResponse.json({ error: "Le nom et les trois prix sont obligatoires." }, { status: 400 });
     }
-    if (!(primaryFile instanceof File) || primaryFile.size === 0) {
-      return NextResponse.json({ error: "Veuillez sélectionner une image principale." }, { status: 400 });
-    }
-    if (additionalFiles.length > 5) {
-      return NextResponse.json({ error: "Vous pouvez ajouter jusqu’à 5 images supplémentaires." }, { status: 400 });
-    }
 
     const products = await getProducts();
-    const productId = randomUUID();
-    const upload = async (file: File) => {
-      const uploaded = await uploadProductImage(file, productId);
-      uploadedUrls.push(uploaded.publicUrl);
-      return uploaded.publicUrl;
-    };
-    const uploadedPrimary = await upload(primaryFile);
-    const uploadedImages: string[] = [];
-    for (const file of additionalFiles) uploadedImages.push(await upload(file));
-    const image = uploadedPrimary;
-    const stockQuantity = getQuantity(formData);
+    const image = images[0];
+    const stockQuantity = getQuantity(payload.stockQuantity);
     const available = stockQuantity > 0;
     const firstSortOrder = products.reduce(
       (lowest, product) => Math.min(lowest, product.sortOrder),
@@ -94,15 +95,15 @@ export async function POST(request: Request) {
       priceXof,
       priceEur,
       priceUsd,
-      description,
+      description: getText(payload.description),
       image,
-      images: Array.from(new Set([image, ...uploadedImages])).slice(0, 6),
-      brand: getText(formData, "brand"),
-      category: getText(formData, "category"),
-      color: getText(formData, "color"),
+      images,
+      brand: getText(payload.brand),
+      category: getText(payload.category),
+      color: getText(payload.color),
       stockQuantity,
-      featured: formData.get("featured") === "true",
-      newArrival: formData.get("newArrival") === "true",
+      featured: payload.featured === true,
+      newArrival: payload.newArrival === true,
       available,
       inStock: available,
       sortOrder: firstSortOrder - 1,
@@ -191,13 +192,6 @@ export async function POST(request: Request) {
       stack: error instanceof Error ? error.stack : null,
     });
 
-    if (uploadedUrls.length > 0) {
-      try {
-        await deleteProductImages(uploadedUrls);
-      } catch (cleanupError) {
-        console.error("Product image cleanup failed:", cleanupError);
-      }
-    }
     return NextResponse.json(
       errorResponse,
       { status: 400 },

@@ -18,6 +18,12 @@ import { formatDualPrice, formatFcfaPrice } from "@/app/lib/prices";
 import { formatMoney, normalizeCurrency, SUPPORTED_CURRENCIES } from "@/app/lib/currency";
 import { generateClientId } from "@/app/lib/client-id";
 import type { Product } from "@/app/lib/products";
+import {
+  buildProductCreatePayload,
+  cleanupUploadedProductImages,
+  compressProductImage,
+  uploadProductImageDirect,
+} from "@/app/lib/product-image-upload";
 import CampaignLinkGenerator from "./CampaignLinkGenerator";
 import ProductImage from "@/app/components/ProductImage";
 import { exportOrdersPdf, exportOrdersXlsx, filterOrdersForExport, totalExportRevenue, type ExportDateFilter } from "./orderExports";
@@ -192,11 +198,13 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
   const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
   const [isAnalyzingBulkImages, setIsAnalyzingBulkImages] = useState(false);
   const [bulkAnalysisProgress, setBulkAnalysisProgress] = useState(0);
+  const [bulkUploadProgress, setBulkUploadProgress] = useState(0);
   const [editing, setEditing] = useState<Product | null>(null);
   const [editedImage, setEditedImage] = useState<File | null>(null);
   const [editedImages, setEditedImages] = useState<File[]>([]);
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [productUploadProgress, setProductUploadProgress] = useState<number | null>(null);
   const [isAnalyzingNewImage, setIsAnalyzingNewImage] = useState(false);
   const [newImageAnalysisMessage, setNewImageAnalysisMessage] = useState("");
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
@@ -586,10 +594,19 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     simpleSubmittingRef.current = true;
     setMessage("");
     setIsSaving(true);
+    setProductUploadProgress(0);
+    const productId = crypto.randomUUID();
+    const uploadedUrls: string[] = [];
 
     try {
-      const formData = new FormData();
-      appendFormData(formData, newProduct, newImage, newImages);
+      const files = [newImage, ...newImages];
+      for (let index = 0; index < files.length; index += 1) {
+        const url = await uploadProductImageDirect(files[index], productId, (progress) => {
+          setProductUploadProgress(Math.round(((index + progress / 100) / files.length) * 100));
+        });
+        uploadedUrls.push(url);
+      }
+      const payload = buildProductCreatePayload({ ...newProduct, id: productId }, uploadedUrls);
       console.info("[admin][product-create] Envoi de la création du produit.", {
         name: newProduct.name,
         stockQuantity: newProduct.stockQuantity,
@@ -597,7 +614,11 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
         additionalImageCount: newImages.length,
       });
       const product = await readResponse(
-        await fetch("/api/admin/products", { method: "POST", body: formData }),
+        await fetch("/api/admin/products", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }),
         "product-create",
       );
       setProducts((current) => [...current, product]);
@@ -608,10 +629,12 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
       setSimpleFormVersion((current) => current + 1);
       setMessage("Produit ajouté.");
     } catch (error) {
+      await cleanupUploadedProductImages(uploadedUrls);
       setMessage(error instanceof Error ? error.message : "Impossible d’ajouter le produit.");
     } finally {
       simpleSubmittingRef.current = false;
       setIsSaving(false);
+      setProductUploadProgress(null);
     }
   }
 
@@ -646,8 +669,9 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
   }
 
   async function analyzeProductImage(file: File) {
+    const compressed = await compressProductImage(file);
     const formData = new FormData();
-    formData.set("image", file);
+    formData.set("image", compressed);
     return readResponse<ProductImageAnalysis>(await fetch("/api/admin/products/analyze-image", {
       method: "POST",
       body: formData,
@@ -750,35 +774,42 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     bulkSubmittingRef.current = true;
     setMessage("");
     setIsBulkSubmitting(true);
+    setBulkUploadProgress(0);
     const createdProducts: Product[] = [];
     const failedIds = new Set<string>();
     const failureMessages = new Map<string, string>();
 
-    for (const row of bulkRows) {
+    for (let index = 0; index < bulkRows.length; index += 1) {
+      const row = bulkRows[index];
+      const productId = crypto.randomUUID();
+      const uploadedUrls: string[] = [];
       try {
-        const formData = new FormData();
-        appendFormData(
-          formData,
-          {
-            ...emptyProduct,
-            name: row.name,
-            color: row.color,
-            price: row.price,
-            priceXof: Math.max(1, Math.round(Number(row.price))),
-            priceEur: Math.max(1, Math.round(Number(row.priceEur) * 100)),
-            priceUsd: Math.max(1, Math.round(Number(row.priceUsd) * 100)),
-            stockQuantity: Math.max(0, Math.floor(Number(row.stock))),
-            description: row.description,
-          },
-          row.file,
-          [],
-        );
+        uploadedUrls.push(await uploadProductImageDirect(row.file, productId, (progress) => {
+          setBulkUploadProgress(Math.round(((index + progress / 100) / bulkRows.length) * 100));
+        }));
+        const payload = buildProductCreatePayload({
+          ...emptyProduct,
+          id: productId,
+          name: row.name,
+          color: row.color,
+          price: row.price,
+          priceXof: Math.max(1, Math.round(Number(row.price))),
+          priceEur: Math.max(1, Math.round(Number(row.priceEur) * 100)),
+          priceUsd: Math.max(1, Math.round(Number(row.priceUsd) * 100)),
+          stockQuantity: Math.max(0, Math.floor(Number(row.stock))),
+          description: row.description,
+        }, uploadedUrls);
         const product = await readResponse(
-          await fetch("/api/admin/products", { method: "POST", body: formData }),
+          await fetch("/api/admin/products", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          }),
           "bulk-product-create",
         );
         createdProducts.push(product);
       } catch (error) {
+        await cleanupUploadedProductImages(uploadedUrls);
         failedIds.add(row.id);
         failureMessages.set(row.id, error instanceof Error ? error.message : "Impossible d’ajouter ce produit.");
       }
@@ -800,6 +831,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     } finally {
       bulkSubmittingRef.current = false;
       setIsBulkSubmitting(false);
+      setBulkUploadProgress(0);
     }
   }
 
@@ -1185,7 +1217,8 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
               onSubmit={createProduct}
               requireMainImage
               isSubmitting={isSaving}
-              submitLabel={isSaving ? "Enregistrement…" : "Ajouter le produit"}
+              uploadProgress={productUploadProgress}
+              submitLabel={isSaving ? `Téléversement ${productUploadProgress ?? 100} %…` : "Ajouter le produit"}
             />
           </section>
 
@@ -1228,7 +1261,8 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
                   </div>
                 ))}
                 <p className="text-sm font-bold text-zinc-700">{bulkRows.length} produit(s) à ajouter</p>
-                <button type="button" onClick={handleBulkSubmit} disabled={isBulkSubmitting || isAnalyzingBulkImages} className="w-full rounded-xl bg-black py-3.5 font-black text-white transition hover:bg-[#c9a227] disabled:cursor-wait disabled:opacity-60">{isBulkSubmitting ? "Ajout en cours…" : "Ajouter tous les produits"}</button>
+                {isBulkSubmitting && <progress aria-label="Progression du téléversement" value={bulkUploadProgress} max={100} className="h-2 w-full accent-[#c9a227]" />}
+                <button type="button" onClick={handleBulkSubmit} disabled={isBulkSubmitting || isAnalyzingBulkImages} className="w-full rounded-xl bg-black py-3.5 font-black text-white transition hover:bg-[#c9a227] disabled:cursor-wait disabled:opacity-60">{isBulkSubmitting ? `Téléversement ${bulkUploadProgress} %…` : "Ajouter tous les produits"}</button>
               </div>
             )}
           </section>
@@ -1532,6 +1566,7 @@ function ProductEditor({
   onSubmit,
   requireMainImage = false,
   isSubmitting,
+  uploadProgress = null,
   submitLabel,
 }: {
   form: ProductForm | Product;
@@ -1545,6 +1580,7 @@ function ProductEditor({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   requireMainImage?: boolean;
   isSubmitting: boolean;
+  uploadProgress?: number | null;
   submitLabel: string;
 }) {
   const [mainPreview, setMainPreview] = useState<string | null>(null);
@@ -1635,6 +1671,7 @@ function ProductEditor({
         </div>
       </FormSection>
 
+      {isSubmitting && uploadProgress !== null && <progress aria-label="Progression du téléversement" value={uploadProgress} max={100} className="h-2 w-full accent-[#c9a227] xl:col-span-12" />}
       <button type="submit" disabled={isSubmitting} className="w-full rounded-xl bg-black py-3.5 font-black text-white shadow-sm transition hover:bg-[#c9a227] disabled:cursor-wait disabled:opacity-60 xl:col-span-12">{submitLabel}</button>
     </form>
   );

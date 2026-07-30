@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 
 export const PRODUCT_IMAGES_BUCKET = "product-images";
 export const MAX_PRODUCT_IMAGE_BYTES = 10 * 1024 * 1024;
+export const DIRECT_UPLOAD_CONTENT_TYPES = ["image/jpeg", "image/webp"] as const;
 
 const CONTENT_TYPE_EXTENSIONS: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -56,6 +57,26 @@ function validateProductImage(file: File) {
 function safeProductScope(productId: string) {
   const scope = productId.replace(/[^a-zA-Z0-9_-]/g, "");
   return scope || randomUUID();
+}
+
+export async function createProductImageSignedUpload(productId: string, contentType: string) {
+  if (!DIRECT_UPLOAD_CONTENT_TYPES.includes(contentType as (typeof DIRECT_UPLOAD_CONTENT_TYPES)[number])) {
+    throw new Error("Le format de l’image optimisée est invalide.");
+  }
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(productId)) {
+    throw new Error("L’identifiant du produit est invalide.");
+  }
+
+  const extension = contentType === "image/webp" ? "webp" : "jpg";
+  const path = `products/${safeProductScope(productId)}/${randomUUID()}.${extension}`;
+  const supabase = getStorageClient();
+  const { data, error } = await supabase.storage.from(PRODUCT_IMAGES_BUCKET).createSignedUploadUrl(path);
+  if (error || !data?.signedUrl) {
+    throw new Error(`Impossible de préparer l’upload Supabase : ${error?.message ?? "URL signée absente"}`);
+  }
+  const { data: publicData } = supabase.storage.from(PRODUCT_IMAGES_BUCKET).getPublicUrl(path);
+  if (!publicData.publicUrl) throw new Error("Supabase Storage n’a pas retourné d’URL publique.");
+  return { path, signedUrl: data.signedUrl, publicUrl: publicData.publicUrl };
 }
 
 export async function uploadProductImage(file: File, productId: string) {
@@ -130,4 +151,23 @@ export async function deleteProductImages(imageUrls: Iterable<string>) {
 
   const { error } = await getStorageClient().storage.from(PRODUCT_IMAGES_BUCKET).remove(paths);
   if (error) throw new Error(`Impossible de supprimer les images du Storage : ${error.message}`);
+}
+
+export async function deleteUnreferencedProductImages(imageUrls: Iterable<string>) {
+  const candidates = Array.from(new Set(Array.from(imageUrls))).filter((url) => getProductImageStoragePath(url));
+  if (candidates.length === 0) return 0;
+
+  const supabase = getStorageClient();
+  const { data, error } = await supabase.from("products").select("image,images");
+  if (error) throw new Error(`Impossible de vérifier les images utilisées : ${error.message}`);
+  const referenced = new Set<string>();
+  for (const product of data ?? []) {
+    if (typeof product.image === "string") referenced.add(product.image);
+    if (Array.isArray(product.images)) {
+      product.images.filter((url): url is string => typeof url === "string").forEach((url) => referenced.add(url));
+    }
+  }
+  const orphaned = candidates.filter((url) => !referenced.has(url));
+  await deleteProductImages(orphaned);
+  return orphaned.length;
 }
