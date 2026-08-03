@@ -10,12 +10,11 @@ import ProductCardPrice from "./ProductCardPrice";
 import TrendingProducts from "./TrendingProducts";
 import { useCurrency } from "./CurrencyProvider";
 import FavoriteButton from "./FavoriteButton";
-
-const WHATSAPP_URL = "https://wa.me/22950687515";
+import { productWhatsAppOrderUrl } from "@/app/lib/product-whatsapp";
 
 function getOrderUrl(product: Product, currency: Currency) {
-  const message = `Bonjour KING OF CAPS, je souhaite commander ${product.name} au prix de ${formatMoney(getProductPrice(product, currency), currency)}.`;
-  return `${WHATSAPP_URL}?text=${encodeURIComponent(message)}`;
+  const formattedPrice = formatMoney(getProductPrice(product, currency), currency);
+  return productWhatsAppOrderUrl(product, formattedPrice);
 }
 
 export default function ProductGallery({ products }: { products: Product[] }) {

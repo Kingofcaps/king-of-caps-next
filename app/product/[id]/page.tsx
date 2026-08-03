@@ -11,8 +11,8 @@ import ProductImageGallery from "./ProductImageGallery";
 import ProductPurchaseActions from "./ProductPurchaseActions";
 import CartLink from "../../components/CartLink";
 import CurrencySelector from "../../components/CurrencySelector";
+import { KING_OF_CAPS_WHATSAPP_URL, productWhatsAppOrderUrl } from "../../lib/product-whatsapp";
 
-const WHATSAPP_URL = "https://wa.me/22950687515";
 const getProductForPage = cache(getProduct);
 
 export const dynamic = "force-dynamic";
@@ -70,8 +70,7 @@ export default async function ProductPage({
     .filter((image) => image !== product.image);
   const currency = await getRequestCurrency();
   const selectedPrice = getProductPrice(product, currency);
-  const orderMessage = `Bonjour KING OF CAPS, je souhaite commander ${product.name} au prix de ${formatMoney(selectedPrice, currency)}.`;
-  const orderUrl = `${WHATSAPP_URL}?text=${encodeURIComponent(orderMessage)}`;
+  const orderUrl = productWhatsAppOrderUrl(product, formatMoney(selectedPrice, currency));
   const productUrl = absoluteUrl(`/product/${product.id}`);
   const productJsonLd = {
     "@context": "https://schema.org",
@@ -115,7 +114,7 @@ export default async function ProductPage({
           <Link href="/" className="text-sm font-bold tracking-[0.22em] text-black">
             KING OF CAPS
           </Link>
-          <div className="flex items-center gap-2"><CurrencySelector /><CartLink /><a href={WHATSAPP_URL} target="_blank" rel="noreferrer" className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#c9a227]">WhatsApp</a></div>
+          <div className="flex items-center gap-2"><CurrencySelector /><CartLink /><a href={KING_OF_CAPS_WHATSAPP_URL} target="_blank" rel="noreferrer" className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#c9a227]">WhatsApp</a></div>
         </div>
       </header>
 
