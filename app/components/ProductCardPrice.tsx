@@ -14,7 +14,7 @@ export default function ProductCardPrice({
   const price = getProductPrice(prices, currency);
 
   return (
-    <div className="mt-1 flex min-h-14 flex-wrap items-start justify-between gap-x-1.5 gap-y-1 sm:min-h-[3.75rem] sm:gap-x-3">
+    <div className="mt-1 flex flex-wrap items-start justify-between gap-x-1.5 gap-y-1 sm:gap-x-3">
       <div className="min-w-0">
         <p className="whitespace-nowrap text-[11px] font-black leading-tight text-[#d4af37] sm:text-xl">
           {formatMoney(price, currency)}

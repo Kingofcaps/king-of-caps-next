@@ -79,7 +79,7 @@ export default function ProductReveal({ children, index }: { children: ReactNode
     <div
       ref={elementRef}
       style={{ transitionDelay: revealState === "visible" ? `${delay}ms` : "0ms" }}
-      className={`h-full motion-reduce:translate-y-0 motion-reduce:opacity-100 motion-reduce:transition-none ${isInitialized ? "transition-[opacity,transform] duration-[600ms] ease-out" : ""} ${isWaiting ? "translate-y-5 opacity-0" : "translate-y-0 opacity-100"}`}
+      className={`self-start motion-reduce:translate-y-0 motion-reduce:opacity-100 motion-reduce:transition-none ${isInitialized ? "transition-[opacity,transform] duration-[600ms] ease-out" : ""} ${isWaiting ? "translate-y-5 opacity-0" : "translate-y-0 opacity-100"}`}
     >
       {children}
     </div>

@@ -57,7 +57,7 @@ export default function ProductGallery({ products }: { products: Product[] }) {
         <div className="mt-2 grid grid-cols-3 gap-3 sm:grid-cols-2 sm:gap-8 lg:grid-cols-4">
           {filteredProducts.map((product, index) => (
             <ProductReveal key={product.id} index={index}>
-              <article className="group h-full overflow-hidden rounded-[18px] border border-[#e5e5e5] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.06)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_14px_32px_rgba(0,0,0,0.1)]">
+              <article className="group overflow-hidden rounded-[18px] border border-[#e5e5e5] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.06)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_14px_32px_rgba(0,0,0,0.1)]">
               <div className="relative aspect-[4/5] overflow-hidden rounded-t-[18px] bg-zinc-100">
                 <Link
                   href={`/product/${product.id}`}
