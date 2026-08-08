@@ -2,7 +2,6 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { PaymentMethod } from "./orders";
 
 const PAYDUNYA_API_URL = "https://app.paydunya.com/api/v1/checkout-invoice";
-const PAYDUNYA_CHECKOUT_URL = "https://app.paydunya.com/checkout/invoice";
 const SITE_URL = "https://kingofcaps.bj";
 
 type CheckoutOrder = {
@@ -56,10 +55,6 @@ export function isPayDunyaConfigured() {
   );
 }
 
-export function payDunyaCheckoutUrl(token: string) {
-  return `${PAYDUNYA_CHECKOUT_URL}/${encodeURIComponent(token)}`;
-}
-
 function getConfig() {
   const masterKey = process.env.PAYDUNYA_MASTER_KEY?.trim();
   const privateKey = process.env.PAYDUNYA_PRIVATE_KEY?.trim();
@@ -89,14 +84,28 @@ function apiHeaders(config: ReturnType<typeof getConfig>) {
   };
 }
 
-function payDunyaTokenFromUrl(value: string) {
+function payDunyaCheckoutUrlFromResponse(value: string) {
   try {
     const url = new URL(value);
-    if (url.protocol !== "https:" || url.hostname !== "app.paydunya.com") return "";
-    const match = url.pathname.match(/^\/checkout\/invoice\/([^/]+)\/?$/);
-    return match ? decodeURIComponent(match[1]).trim() : "";
+    const isPayDunyaHost = url.hostname === "paydunya.com" || url.hostname.endsWith(".paydunya.com");
+    return url.protocol === "https:" && isPayDunyaHost ? url.toString() : "";
   } catch {
     return "";
+  }
+}
+
+function maskedPayDunyaValue(value: string) {
+  try {
+    const url = new URL(value);
+    const segments = url.pathname.split("/");
+    const lastSegment = segments.findLastIndex(Boolean);
+    if (lastSegment >= 0) segments[lastSegment] = "[REDACTED]";
+    url.pathname = segments.join("/");
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return value.slice(0, 500);
   }
 }
 
@@ -204,15 +213,22 @@ export async function createPayDunyaCheckout(
 
   const responseUrl = payload.response_text?.trim() ?? "";
   const responseToken = payload.token?.trim() ?? "";
-  const urlToken = payDunyaTokenFromUrl(responseUrl);
-  const invoiceToken = responseToken || urlToken;
+  const checkoutUrl = payDunyaCheckoutUrlFromResponse(responseUrl);
 
-  if (!invoiceToken || (responseToken && urlToken && responseToken !== urlToken)) {
-    logPayDunyaCreateError(response, rawBody, config, "Token ou URL de facture incohérent.");
+  console.info("Réponse de création de facture PayDunya :", {
+    httpStatus: response.status,
+    responseCode: payload.response_code ?? null,
+    responseText: maskedPayDunyaValue(responseUrl),
+    tokenPresent: Boolean(responseToken),
+    checkoutUrl: checkoutUrl ? maskedPayDunyaValue(checkoutUrl) : null,
+  });
+
+  if (!responseToken || !checkoutUrl) {
+    logPayDunyaCreateError(response, rawBody, config, "Token ou URL de facture manquant.");
     throw new Error("PayDunya n’a pas retourné une facture de paiement valide.");
   }
 
-  return { token: invoiceToken, url: payDunyaCheckoutUrl(invoiceToken) };
+  return { token: responseToken, url: checkoutUrl };
 }
 
 export async function verifyPayDunyaPayment(

@@ -3,7 +3,6 @@ import {
   createPayDunyaCheckout,
   isPayDunyaConfigured,
   ONLINE_PAYMENT_UNAVAILABLE_MESSAGE,
-  payDunyaCheckoutUrl,
 } from "@/app/lib/paydunya";
 import { notifyNewOrder, sendCustomerOrderConfirmation } from "@/app/lib/order-notifications";
 import { isOnlinePaymentMethod, startOrderPayment } from "@/app/lib/payment-workflows";
@@ -99,7 +98,7 @@ export async function POST(request: Request) {
           return NextResponse.json({ success: true, orderNumber: existingOrder.order_number });
         }
         if (existingOrder.paydunya_token && existingOrder.order_status === "awaiting_payment" && existingOrder.stock_reserved_at) {
-          return NextResponse.json({ success: true, orderNumber: existingOrder.order_number, checkoutUrl: payDunyaCheckoutUrl(existingOrder.paydunya_token) });
+          return NextResponse.json({ success: false, error: "Une tentative de paiement PayDunya est déjà en cours pour cette commande." }, { status: 409 });
         }
         return NextResponse.json({ success: false, error: "Cette tentative de commande a déjà été traitée." }, { status: 409 });
       }
@@ -206,9 +205,7 @@ export async function POST(request: Request) {
         ? NextResponse.json({
             success: true,
             orderNumber: result.order.order_number,
-            checkoutUrl: result.order.paydunya_token
-              ? payDunyaCheckoutUrl(result.order.paydunya_token)
-              : result.checkoutUrl,
+            checkoutUrl: result.checkoutUrl,
           })
         : NextResponse.json({ success: true, orderNumber: result.order.order_number });
     } catch (error) {

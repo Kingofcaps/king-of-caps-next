@@ -39,7 +39,7 @@ function payDunyaFetcher(onBody: (body: Record<string, unknown>) => void) {
     onBody(JSON.parse(String(init?.body)) as Record<string, unknown>);
     return Response.json({
       response_code: "00",
-      response_text: "https://app.paydunya.com/checkout/invoice/test-token",
+      response_text: "https://app.paydunya.com/payment/session/test-token?locale=fr",
       token: "test-token",
     });
   }) as typeof fetch;
@@ -82,31 +82,19 @@ test("Mobile Money crée une facture PayDunya puis utilise son URL sécurisée",
     return_url: "https://kingofcaps.bj/api/payments/paydunya/return",
     callback_url: "https://kingofcaps.bj/api/paydunya/ipn",
   });
-  assert.equal(checkout.url, "https://app.paydunya.com/checkout/invoice/test-token");
+  assert.equal(checkout.url, "https://app.paydunya.com/payment/session/test-token?locale=fr");
 });
 
-test("le token est récupéré depuis l’URL officielle si PayDunya ne le répète pas", async () => {
+test("l’URL de paiement retournée par PayDunya est conservée sans reconstruction", async () => {
+  const returnedUrl = "https://paydunya.com/payment/session/live-token?locale=fr";
   const checkout = await createPayDunyaCheckout(checkoutOrder, "mobile_money", (async () => Response.json({
     response_code: "00",
-    response_text: "https://app.paydunya.com/checkout/invoice/live-token-from-url",
-    description: "Checkout Invoice Created",
-  })) as typeof fetch);
-
-  assert.deepEqual(checkout, {
-    token: "live-token-from-url",
-    url: "https://app.paydunya.com/checkout/invoice/live-token-from-url",
-  });
-});
-
-test("l’URL live est construite depuis le token si response_text ne contient pas d’URL", async () => {
-  const checkout = await createPayDunyaCheckout(checkoutOrder, "mobile_money", (async () => Response.json({
-    response_code: "00",
-    response_text: "Checkout Invoice Created",
+    response_text: returnedUrl,
     description: "Checkout Invoice Created",
     token: "live-token",
   })) as typeof fetch);
 
-  assert.equal(checkout.url, "https://app.paydunya.com/checkout/invoice/live-token");
+  assert.equal(checkout.url, returnedUrl);
 });
 
 test("la carte bancaire utilise la même page sécurisée PayDunya", async () => {
