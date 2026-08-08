@@ -89,13 +89,38 @@ function apiHeaders(config: ReturnType<typeof getConfig>) {
   };
 }
 
-function isSecurePayDunyaUrl(value: string) {
+function payDunyaTokenFromUrl(value: string) {
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && url.hostname === "app.paydunya.com";
+    if (url.protocol !== "https:" || url.hostname !== "app.paydunya.com") return "";
+    const match = url.pathname.match(/^\/checkout\/invoice\/([^/]+)\/?$/);
+    return match ? decodeURIComponent(match[1]).trim() : "";
   } catch {
-    return false;
+    return "";
   }
+}
+
+function sanitizedPayDunyaBody(rawBody: string, config: ReturnType<typeof getConfig>) {
+  const secrets = [config.masterKey, config.privateKey, config.publicKey, config.token];
+  let sanitized = rawBody;
+  for (const secret of secrets) sanitized = sanitized.replaceAll(secret, "[REDACTED]");
+  return sanitized
+    .replace(/("token"\s*:\s*")[^"]+("?)/gi, "$1[REDACTED]$2")
+    .replace(/(\/checkout\/invoice\/)[^"?\s/]+/gi, "$1[REDACTED]")
+    .slice(0, 4_000);
+}
+
+function logPayDunyaCreateError(
+  response: Response,
+  rawBody: string,
+  config: ReturnType<typeof getConfig>,
+  reason: string,
+) {
+  console.error("Erreur de création de facture PayDunya :", {
+    reason,
+    httpStatus: response.status,
+    responseBody: sanitizedPayDunyaBody(rawBody, config),
+  });
 }
 
 function normalizeStatus(value: string | undefined): PayDunyaPaymentStatus {
@@ -163,18 +188,31 @@ export async function createPayDunyaCheckout(
     cache: "no-store",
   });
 
-  const payload = (await response.json().catch(() => ({}))) as PayDunyaCreateResponse;
+  const rawBody = await response.text();
+  let payload: PayDunyaCreateResponse = {};
+  try {
+    payload = JSON.parse(rawBody) as PayDunyaCreateResponse;
+  } catch {
+    logPayDunyaCreateError(response, rawBody, config, "Réponse non JSON.");
+    throw new Error("PayDunya a retourné une réponse illisible.");
+  }
+
   if (!response.ok || payload.response_code !== "00") {
+    logPayDunyaCreateError(response, rawBody, config, "Facture refusée par PayDunya.");
     throw new Error(payload.description || payload.response_text || "Impossible de créer la facture PayDunya.");
   }
 
-  const checkoutUrl = payload.response_text?.trim() ?? "";
-  const invoiceToken = payload.token?.trim() ?? "";
-  if (!invoiceToken || !isSecurePayDunyaUrl(checkoutUrl)) {
+  const responseUrl = payload.response_text?.trim() ?? "";
+  const responseToken = payload.token?.trim() ?? "";
+  const urlToken = payDunyaTokenFromUrl(responseUrl);
+  const invoiceToken = responseToken || urlToken;
+
+  if (!invoiceToken || (responseToken && urlToken && responseToken !== urlToken)) {
+    logPayDunyaCreateError(response, rawBody, config, "Token ou URL de facture incohérent.");
     throw new Error("PayDunya n’a pas retourné une facture de paiement valide.");
   }
 
-  return { token: invoiceToken, url: checkoutUrl };
+  return { token: invoiceToken, url: payDunyaCheckoutUrl(invoiceToken) };
 }
 
 export async function verifyPayDunyaPayment(
