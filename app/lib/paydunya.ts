@@ -1,10 +1,9 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { PaymentMethod } from "./orders";
 
-const PAYDUNYA_ENDPOINTS = {
-  test: "https://app.paydunya.com/sandbox-api/v1/checkout-invoice",
-  production: "https://app.paydunya.com/api/v1/checkout-invoice",
-} as const;
+const PAYDUNYA_API_URL = "https://app.paydunya.com/api/v1/checkout-invoice";
+const PAYDUNYA_CHECKOUT_URL = "https://app.paydunya.com/checkout/invoice";
+const SITE_URL = "https://kingofcaps.bj";
 
 type CheckoutOrder = {
   order_number: string;
@@ -53,15 +52,12 @@ export function isPayDunyaConfigured() {
     process.env.PAYDUNYA_MASTER_KEY?.trim()
     && process.env.PAYDUNYA_PRIVATE_KEY?.trim()
     && process.env.PAYDUNYA_PUBLIC_KEY?.trim()
-    && process.env.PAYDUNYA_TOKEN?.trim()
-    && process.env.NEXT_PUBLIC_SITE_URL?.trim(),
+    && process.env.PAYDUNYA_TOKEN?.trim(),
   );
 }
 
 export function payDunyaCheckoutUrl(token: string) {
-  const mode = process.env.PAYDUNYA_MODE === "production" ? "production" : "test";
-  const path = mode === "production" ? "checkout/invoice" : "sandbox-checkout/invoice";
-  return `https://app.paydunya.com/${path}/${encodeURIComponent(token)}`;
+  return `${PAYDUNYA_CHECKOUT_URL}/${encodeURIComponent(token)}`;
 }
 
 function getConfig() {
@@ -69,10 +65,8 @@ function getConfig() {
   const privateKey = process.env.PAYDUNYA_PRIVATE_KEY?.trim();
   const publicKey = process.env.PAYDUNYA_PUBLIC_KEY?.trim();
   const token = process.env.PAYDUNYA_TOKEN?.trim();
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  const mode = process.env.PAYDUNYA_MODE === "production" ? "production" : "test";
 
-  if (!masterKey || !privateKey || !publicKey || !token || !siteUrl) {
+  if (!masterKey || !privateKey || !publicKey || !token) {
     throw new Error("PayDunya n’est pas encore configuré.");
   }
 
@@ -81,8 +75,8 @@ function getConfig() {
     privateKey,
     publicKey,
     token,
-    siteUrl: siteUrl.replace(/\/$/, ""),
-    baseUrl: PAYDUNYA_ENDPOINTS[mode],
+    siteUrl: SITE_URL,
+    baseUrl: PAYDUNYA_API_URL,
   };
 }
 
@@ -163,7 +157,7 @@ export async function createPayDunyaCheckout(
       actions: {
         cancel_url: `${config.siteUrl}/api/payments/paydunya/cancel`,
         return_url: `${config.siteUrl}/api/payments/paydunya/return`,
-        callback_url: `${config.siteUrl}/api/payments/paydunya/ipn`,
+        callback_url: `${config.siteUrl}/api/paydunya/ipn`,
       },
     }),
     cache: "no-store",

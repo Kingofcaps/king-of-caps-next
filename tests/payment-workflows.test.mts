@@ -7,12 +7,10 @@ import { processPayDunyaPayment, startOrderPayment } from "../app/lib/payment-wo
 const originalEnvironment = { ...process.env };
 
 beforeEach(() => {
-  process.env.PAYDUNYA_MODE = "test";
   process.env.PAYDUNYA_MASTER_KEY = "master-key";
   process.env.PAYDUNYA_PRIVATE_KEY = "private-key";
   process.env.PAYDUNYA_PUBLIC_KEY = "public-key";
   process.env.PAYDUNYA_TOKEN = "application-token";
-  process.env.NEXT_PUBLIC_SITE_URL = "https://www.kingofcaps.bj";
 });
 
 afterEach(() => {
@@ -31,12 +29,12 @@ const checkoutOrder = {
 
 function payDunyaFetcher(onBody: (body: Record<string, unknown>) => void) {
   return (async (input: string | URL | Request, init?: RequestInit) => {
-    assert.equal(String(input), "https://app.paydunya.com/sandbox-api/v1/checkout-invoice/create");
+    assert.equal(String(input), "https://app.paydunya.com/api/v1/checkout-invoice/create");
     assert.equal(init?.method, "POST");
     onBody(JSON.parse(String(init?.body)) as Record<string, unknown>);
     return Response.json({
       response_code: "00",
-      response_text: "https://app.paydunya.com/sandbox-checkout/invoice/test-token",
+      response_text: "https://app.paydunya.com/checkout/invoice/test-token",
       token: "test-token",
     });
   }) as typeof fetch;
@@ -63,16 +61,23 @@ test("Mobile Money crée une facture PayDunya puis utilise son URL sécurisée",
   let channels: unknown;
   let currency: unknown;
   let totalAmount: unknown;
+  let actions: unknown;
   const checkout = await createPayDunyaCheckout(checkoutOrder, "mobile_money", payDunyaFetcher((body) => {
     channels = (body.invoice as { channels?: unknown }).channels;
     totalAmount = (body.invoice as { total_amount?: unknown }).total_amount;
     currency = (body.custom_data as { currency?: unknown }).currency;
+    actions = body.actions;
   }));
 
   assert.deepEqual(channels, ["mtn-benin", "moov-benin"]);
   assert.equal(currency, "XOF");
   assert.equal(totalAmount, 10000);
-  assert.equal(checkout.url, "https://app.paydunya.com/sandbox-checkout/invoice/test-token");
+  assert.deepEqual(actions, {
+    cancel_url: "https://kingofcaps.bj/api/payments/paydunya/cancel",
+    return_url: "https://kingofcaps.bj/api/payments/paydunya/return",
+    callback_url: "https://kingofcaps.bj/api/paydunya/ipn",
+  });
+  assert.equal(checkout.url, "https://app.paydunya.com/checkout/invoice/test-token");
 });
 
 test("la carte bancaire utilise la même page sécurisée PayDunya", async () => {
@@ -88,7 +93,7 @@ test("la carte bancaire utilise la même page sécurisée PayDunya", async () =>
 test("la confirmation PayDunya vérifie le token, le montant et la devise XOF", async () => {
   const hash = createHash("sha512").update("master-key").digest("hex");
   const payment = await verifyPayDunyaPayment("test-token", (async (input: string | URL | Request) => {
-    assert.equal(String(input), "https://app.paydunya.com/sandbox-api/v1/checkout-invoice/confirm/test-token");
+    assert.equal(String(input), "https://app.paydunya.com/api/v1/checkout-invoice/confirm/test-token");
     return Response.json({
       response_code: "00",
       hash,

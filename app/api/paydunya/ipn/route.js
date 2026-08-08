@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { processPayDunyaOrder } from "@/app/lib/paydunya-order-processing";
 
 export const runtime = "nodejs";
 
@@ -35,6 +36,9 @@ async function readNotification(request) {
     return {
       data,
       hash: asNonEmptyString(data?.hash),
+      token:
+        asNonEmptyString(data?.invoice?.token) ??
+        asNonEmptyString(data?.token),
     };
   }
 
@@ -48,6 +52,11 @@ async function readNotification(request) {
       asNonEmptyString(data?.hash) ??
       asNonEmptyString(formData.get("data[hash]")) ??
       asNonEmptyString(formData.get("hash")),
+    token:
+      asNonEmptyString(data?.invoice?.token) ??
+      asNonEmptyString(data?.token) ??
+      asNonEmptyString(formData.get("data[invoice][token]")) ??
+      asNonEmptyString(formData.get("data[token]")),
   };
 }
 
@@ -70,7 +79,7 @@ export async function GET() {
 }
 
 export async function POST(request) {
-  const masterKey = process.env.PAYDUNYA_MASTER_KEY;
+  const masterKey = process.env.PAYDUNYA_MASTER_KEY?.trim();
 
   if (!masterKey) {
     return Response.json(
@@ -97,5 +106,24 @@ export async function POST(request) {
     );
   }
 
-  return Response.json({ received: true }, { status: 200 });
+  if (!notification.token) {
+    return Response.json(
+      { error: "Notification PayDunya incomplète." },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const result = await processPayDunyaOrder(notification.token);
+    return Response.json(
+      { received: true, status: result.status },
+      { status: 200 },
+    );
+  } catch (error) {
+    console.error("Erreur de traitement de l’IPN PayDunya :", error);
+    return Response.json(
+      { error: "Notification PayDunya non traitée." },
+      { status: 500 },
+    );
+  }
 }
