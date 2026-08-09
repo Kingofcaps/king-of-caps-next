@@ -14,6 +14,7 @@ import {
   type ShopSaleDraft,
 } from "@/app/lib/shop-sale-workflow";
 import { isRevenueOrder, totalSalesCount } from "@/app/lib/sales-statistics";
+import { isMainAdminOrder, isUnconfirmedPayDunyaOrder } from "@/app/lib/admin-order-visibility";
 import { formatDualPrice, formatFcfaPrice } from "@/app/lib/prices";
 import { formatMoney, normalizeCurrency, SUPPORTED_CURRENCIES } from "@/app/lib/currency";
 import { generateClientId } from "@/app/lib/client-id";
@@ -55,7 +56,7 @@ type ProductImageAnalysis = {
 type AdminView = "dashboard" | "products" | "orders";
 type ProductFilter = "all" | "in_stock" | "low_stock" | "out_of_stock" | "featured" | "new_arrival";
 type ProductSort = "newest" | "name_asc" | "price_asc" | "price_desc" | "stock_asc" | "stock_desc";
-type OrdersFilter = "all" | OrderStatus | "payment_pending" | "paid";
+type OrdersFilter = "all" | OrderStatus | "payment_pending" | "paid" | "paydunya_unconfirmed";
 type OrdersDateFilter = "all" | "today" | "last_7_days" | "last_30_days";
 type OrdersSort = "newest" | "oldest" | "amount_asc" | "amount_desc";
 type BulkDeleteResult = {
@@ -264,18 +265,21 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
       return Number(second.id) - Number(first.id);
     });
   }, [products, productFilter, productSearch, productSort]);
+  const unconfirmedPayDunyaOrders = useMemo(() => orders.filter(isUnconfirmedPayDunyaOrder), [orders]);
   const filteredOrders = useMemo(() => {
     const query = ordersSearch.trim().toLowerCase();
     const today = dayKey(new Date());
     const now = new Date();
     const fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (ordersDateFilter === "last_7_days" ? 6 : 29));
     const result = orders.filter((order) => {
+      const isUnconfirmedPayDunya = isUnconfirmedPayDunyaOrder(order);
+      const matchesVisibility = ordersFilter === "paydunya_unconfirmed" ? isUnconfirmedPayDunya : !isUnconfirmedPayDunya;
       const productNames = getDisplayOrderItems(order).map((item) => item.product_name);
       const matchesSearch = !query || [order.order_number, order.customer_first_name, order.customer_last_name, order.customer_phone, ...productNames].some((value) => value.toLowerCase().includes(query));
-      const matchesFilter = ordersFilter === "all" || (ordersFilter === "payment_pending" && order.payment_status === "pending") || (ordersFilter === "paid" && order.payment_status === "paid") || (ordersFilter in orderStatusLabels && order.order_status === ordersFilter);
+      const matchesFilter = ordersFilter === "all" || ordersFilter === "paydunya_unconfirmed" || (ordersFilter === "payment_pending" && order.payment_status === "pending") || (ordersFilter === "paid" && order.payment_status === "paid") || (ordersFilter in orderStatusLabels && order.order_status === ordersFilter);
       const orderDate = new Date(order.created_at);
       const matchesDate = ordersDateFilter === "all" || (ordersDateFilter === "today" && dayKey(order.created_at) === today) || (ordersDateFilter !== "today" && orderDate >= fromDate);
-      return matchesSearch && matchesFilter && matchesDate;
+      return matchesVisibility && matchesSearch && matchesFilter && matchesDate;
     });
     return [...result].sort((first, second) => {
       if (ordersSort === "oldest") return new Date(first.created_at).getTime() - new Date(second.created_at).getTime();
@@ -294,7 +298,8 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     const weekStart = startOfWeek(now);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const revenueOrders = orders.filter(isRevenueOrder);
-    const recentOrders = [...orders].sort((first, second) => new Date(second.created_at).getTime() - new Date(first.created_at).getTime()).slice(0, 10);
+    const mainOrders = orders.filter(isMainAdminOrder);
+    const recentOrders = [...mainOrders].sort((first, second) => new Date(second.created_at).getTime() - new Date(first.created_at).getTime()).slice(0, 10);
     const days = Array.from({ length: 30 }, (_, index) => {
       const date = new Date();
       date.setHours(0, 0, 0, 0);
@@ -367,10 +372,11 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
       totalSales: totalSalesCount(orders, shopSales),
       onlineSales: revenueOrders.length,
       shopSales: shopSales.length,
-      ordersToday: orders.filter((order) => dayKey(order.created_at) === today).length,
-      pendingOrders: orders.filter((order) => order.order_status === "new" || order.order_status === "pending" || order.order_status === "awaiting_payment").length,
-      deliveredOrders: orders.filter((order) => order.order_status === "delivered").length,
-      cancelledOrders: orders.filter((order) => order.order_status === "cancelled").length,
+      totalOrders: mainOrders.length,
+      ordersToday: mainOrders.filter((order) => dayKey(order.created_at) === today).length,
+      pendingOrders: mainOrders.filter((order) => order.order_status === "new" || order.order_status === "pending" || order.order_status === "awaiting_payment").length,
+      deliveredOrders: mainOrders.filter((order) => order.order_status === "delivered").length,
+      cancelledOrders: mainOrders.filter((order) => order.order_status === "cancelled").length,
       days,
       bestSelling: [...sales.values()].sort((first, second) => second.quantity - first.quantity).slice(0, 5),
       recentOrders,
@@ -436,10 +442,10 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
       if (!shopSalesResponse.ok) throw new Error(shopSalesData.error ?? "Impossible de charger les ventes boutique.");
 
       if (!hasLoadedInitialOrdersRef.current) {
-        knownOrderIdsRef.current = new Set(data.map((order) => order.id));
+        knownOrderIdsRef.current = new Set(data.filter(isMainAdminOrder).map((order) => order.id));
         hasLoadedInitialOrdersRef.current = true;
       } else {
-        data.forEach((order) => announceNewOrder(order.id, order.order_number));
+        data.filter(isMainAdminOrder).forEach((order) => announceNewOrder(order.id, order.order_number));
       }
       setOrders(data);
       setShopSales(shopSalesData);
@@ -487,10 +493,10 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     const supabase = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false } });
     const channel = supabase
       .channel("king-of-caps-admin-orders")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders" }, (payload) => {
-        const order = payload.new as Pick<Order, "id" | "order_number">;
-        if (!order.id || !order.order_number) return;
-        announceNewOrder(order.id, order.order_number);
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders" }, () => {
+        void refreshOrders();
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders" }, () => {
         void refreshOrders();
       })
       .subscribe((status) => {
@@ -1167,7 +1173,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
               <DashboardStat label="Total produits" value={products.length} />
               <DashboardStat label="Produits en stock" value={products.filter((product) => product.stockQuantity > 0).length} tone="green" />
               <DashboardStat label="Produits en rupture" value={dashboard.outOfStock.length} tone="red" />
-              <DashboardStat label="Total commandes" value={orders.length} />
+              <DashboardStat label="Total commandes" value={dashboard.totalOrders} />
               <DashboardStat label="Total ventes" value={dashboard.totalSales} tone="green" />
               <DashboardStat label="Ventes boutique" value={dashboard.shopSales} tone="gold" />
               <DashboardStat label="Ventes en ligne" value={dashboard.onlineSales} tone="blue" />
@@ -1365,7 +1371,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
           <div className="mt-6 space-y-4">
             {ordersMessage && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{ordersMessage}</p>}
             {isExportOpen && <section className="rounded-2xl border border-[#e5e5e5] bg-[#fafafa] p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-4"><div><h3 className="font-black">Exporter les commandes</h3><p className="mt-1 text-sm text-zinc-500">Choisissez la période puis le format du fichier.</p></div><button type="button" onClick={() => setIsExportOpen(false)} className="text-sm font-bold text-zinc-500 hover:text-black">Fermer</button></div><div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]"><label className="text-sm font-bold text-zinc-700"><span className="mb-2 block">Période</span><select value={exportDateFilter} onChange={(event) => setExportDateFilter(event.target.value as ExportDateFilter)} className="w-full rounded-xl border border-gray-300 bg-white px-3 py-3 text-sm text-black outline-none focus:border-[#c9a227] focus:ring-1 focus:ring-[#c9a227]"><option value="all">Toutes les commandes</option><option value="today">Aujourd&apos;hui</option><option value="week">Cette semaine</option><option value="month">Ce mois</option><option value="custom">Intervalle personnalisé</option></select></label>{exportDateFilter === "custom" && <><label className="text-sm font-bold text-zinc-700"><span className="mb-2 block">Du</span><input type="date" value={exportStartDate} onChange={(event) => setExportStartDate(event.target.value)} className="w-full rounded-xl border border-gray-300 bg-white px-3 py-3 text-sm text-black outline-none focus:border-[#c9a227] focus:ring-1 focus:ring-[#c9a227]" /></label><label className="text-sm font-bold text-zinc-700"><span className="mb-2 block">Au</span><input type="date" value={exportEndDate} onChange={(event) => setExportEndDate(event.target.value)} className="w-full rounded-xl border border-gray-300 bg-white px-3 py-3 text-sm text-black outline-none focus:border-[#c9a227] focus:ring-1 focus:ring-[#c9a227]" /></label></>}</div><div className="mt-5 flex flex-wrap items-center gap-3"><button type="button" disabled={isExporting !== null} onClick={() => exportOrders("xlsx")} className="rounded-xl bg-[#1d6f42] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#165a35] disabled:opacity-60">{isExporting === "xlsx" ? "Export Excel…" : "Exporter en Excel (.xlsx)"}</button><button type="button" disabled={isExporting !== null} onClick={() => exportOrders("pdf")} className="rounded-xl bg-black px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#c9a227] disabled:opacity-60">{isExporting === "pdf" ? "Export PDF…" : "Exporter en PDF"}</button><span className="text-sm font-semibold text-zinc-500">{ordersForExport.length} commande{ordersForExport.length > 1 ? "s" : ""} · Revenu : {formatDualPrice(totalExportRevenue(ordersForExport))}</span></div>{exportError && <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{exportError}</p>}</section>}
-            <div className="rounded-2xl border border-[#e5e5e5] bg-[#fafafa] p-4"><div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center"><label><span className="sr-only">Rechercher une commande</span><input value={ordersSearch} onChange={(event) => setOrdersSearch(event.target.value)} placeholder="Rechercher par numéro, client, téléphone ou produit..." className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-black outline-none placeholder:text-gray-400 focus:border-[#c9a227] focus:ring-1 focus:ring-[#c9a227]" /></label><select value={ordersDateFilter} onChange={(event) => setOrdersDateFilter(event.target.value as OrdersDateFilter)} className="rounded-xl border border-gray-300 bg-white px-3 py-3 text-sm font-bold text-zinc-800 outline-none focus:border-[#c9a227] focus:ring-1 focus:ring-[#c9a227]"><option value="all">Toutes les dates</option><option value="today">Aujourd’hui</option><option value="last_7_days">7 derniers jours</option><option value="last_30_days">30 derniers jours</option></select><div className="flex flex-wrap gap-3"><select value={ordersSort} onChange={(event) => setOrdersSort(event.target.value as OrdersSort)} className="rounded-xl border border-gray-300 bg-white px-3 py-3 text-sm font-bold text-zinc-800 outline-none focus:border-[#c9a227] focus:ring-1 focus:ring-[#c9a227]"><option value="newest">Plus récentes</option><option value="oldest">Plus anciennes</option><option value="amount_asc">Montant croissant</option><option value="amount_desc">Montant décroissant</option></select><button type="button" onClick={resetOrderControls} className="rounded-xl border border-[#e5e5e5] bg-white px-3 py-3 text-sm font-bold text-zinc-700 transition hover:border-[#c9a227] hover:text-black">Réinitialiser</button></div></div><div className="mt-4 flex flex-wrap gap-2">{([ ["all", "Toutes"], ["new", "Nouvelles"], ["confirmed", "Confirmées"], ["preparing", "En préparation"], ["delivered", "Livrées"], ["cancelled", "Annulées"], ["payment_pending", "Paiement en attente"], ["paid", "Payées"] ] as Array<[OrdersFilter, string]>).map(([filter, label]) => <button key={filter} type="button" onClick={() => setOrdersFilter(filter)} className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${ordersFilter === filter ? "border-[#c9a227] bg-[#c9a227]/15 text-[#a8861e]" : "border-[#e5e5e5] bg-white text-zinc-600 hover:border-[#c9a227]"}`}>{label}</button>)}</div><p className="mt-4 text-sm font-semibold text-zinc-500">{filteredOrders.length} commande{filteredOrders.length > 1 ? "s" : ""} trouvée{filteredOrders.length > 1 ? "s" : ""}</p></div>
+            <div className="rounded-2xl border border-[#e5e5e5] bg-[#fafafa] p-4"><div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center"><label><span className="sr-only">Rechercher une commande</span><input value={ordersSearch} onChange={(event) => setOrdersSearch(event.target.value)} placeholder="Rechercher par numéro, client, téléphone ou produit..." className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-black outline-none placeholder:text-gray-400 focus:border-[#c9a227] focus:ring-1 focus:ring-[#c9a227]" /></label><select value={ordersDateFilter} onChange={(event) => setOrdersDateFilter(event.target.value as OrdersDateFilter)} className="rounded-xl border border-gray-300 bg-white px-3 py-3 text-sm font-bold text-zinc-800 outline-none focus:border-[#c9a227] focus:ring-1 focus:ring-[#c9a227]"><option value="all">Toutes les dates</option><option value="today">Aujourd’hui</option><option value="last_7_days">7 derniers jours</option><option value="last_30_days">30 derniers jours</option></select><div className="flex flex-wrap gap-3"><select value={ordersSort} onChange={(event) => setOrdersSort(event.target.value as OrdersSort)} className="rounded-xl border border-gray-300 bg-white px-3 py-3 text-sm font-bold text-zinc-800 outline-none focus:border-[#c9a227] focus:ring-1 focus:ring-[#c9a227]"><option value="newest">Plus récentes</option><option value="oldest">Plus anciennes</option><option value="amount_asc">Montant croissant</option><option value="amount_desc">Montant décroissant</option></select><button type="button" onClick={resetOrderControls} className="rounded-xl border border-[#e5e5e5] bg-white px-3 py-3 text-sm font-bold text-zinc-700 transition hover:border-[#c9a227] hover:text-black">Réinitialiser</button></div></div><div className="mt-4 flex flex-wrap gap-2">{([ ["all", "Toutes"], ["new", "Nouvelles"], ["confirmed", "Confirmées"], ["preparing", "En préparation"], ["delivered", "Livrées"], ["cancelled", "Annulées"], ["payment_pending", "Paiement à la livraison en attente"], ["paid", "Payées"], ["paydunya_unconfirmed", `PayDunya non confirmés (${unconfirmedPayDunyaOrders.length})`] ] as Array<[OrdersFilter, string]>).map(([filter, label]) => <button key={filter} type="button" onClick={() => setOrdersFilter(filter)} className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${ordersFilter === filter ? "border-[#c9a227] bg-[#c9a227]/15 text-[#a8861e]" : filter === "paydunya_unconfirmed" && unconfirmedPayDunyaOrders.length > 0 ? "border-amber-300 bg-amber-50 text-amber-800 hover:border-[#c9a227]" : "border-[#e5e5e5] bg-white text-zinc-600 hover:border-[#c9a227]"}`}>{label}</button>)}</div><p className="mt-4 text-sm font-semibold text-zinc-500">{filteredOrders.length} commande{filteredOrders.length > 1 ? "s" : ""} trouvée{filteredOrders.length > 1 ? "s" : ""}</p></div>
             {filteredOrders.map((order) => <OrderCard key={order.id} order={order} isUpdating={updatingOrderId === order.id} isExpanded={expandedOrderId === order.id} onStatusChange={updateOrderStatus} onToggleDetails={() => setExpandedOrderId((current) => current === order.id ? null : order.id)} onDelete={() => setOrderPendingDeletion(order)} />)}
             {!ordersError && filteredOrders.length === 0 && <p className="rounded-xl border border-dashed border-[#e5e5e5] px-4 py-8 text-center text-zinc-500">Aucune commande dans ce filtre.</p>}
           </div>

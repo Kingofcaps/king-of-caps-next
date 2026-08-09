@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CreditCard, Smartphone, Truck, X } from "lucide-react";
+import { ChevronRight, CreditCard, Smartphone, Truck, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/app/components/CartProvider";
@@ -39,7 +39,7 @@ export default function CheckoutForm({
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
   const [note, setNote] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash_on_delivery");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
   const [paymentSheetOpen, setPaymentSheetOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -48,11 +48,16 @@ export default function CheckoutForm({
   const payDunyaTotalXof = useMemo(() => cartSubtotal(items, "XOF"), [items]);
   const deliveryFee = 0;
   const total = subtotal + deliveryFee;
-  const onlinePaymentUnavailable = !onlinePaymentsEnabled && paymentMethod !== "cash_on_delivery";
+  const onlinePaymentUnavailable = !onlinePaymentsEnabled && paymentMethod !== null && paymentMethod !== "cash_on_delivery";
 
   async function handleOrder() {
     if (submissionStarted.current || loading) return;
     if (items.length === 0) return setError("Votre panier est vide.");
+    if (!paymentMethod) {
+      setError("Veuillez choisir un moyen de paiement.");
+      setPaymentSheetOpen(true);
+      return;
+    }
     if (onlinePaymentUnavailable) return setError(ONLINE_PAYMENT_UNAVAILABLE_MESSAGE);
     const fields = [[firstName, "prénom"], [lastName, "nom"], [phone, "téléphone"], [email, "adresse e-mail"], [address, "adresse"], [city, "ville ou quartier"]] as const;
     const missing = fields.find(([value]) => !value.trim());
@@ -116,11 +121,11 @@ export default function CheckoutForm({
           <div><p className="text-sm font-bold tracking-[0.22em] text-[#a8861e]">CHECKOUT SÉCURISÉ</p><h1 className="mt-2 text-3xl font-black sm:text-4xl">Finaliser la commande</h1></div>
           <CheckoutCard title="Informations de l’acheteur"><div className="grid gap-4 sm:grid-cols-2"><Input label="Prénom *" value={firstName} onChange={setFirstName} /><Input label="Nom *" value={lastName} onChange={setLastName} /><Input label="Téléphone *" type="tel" value={phone} onChange={setPhone} /><Input label="Adresse e-mail *" type="email" value={email} onChange={setEmail} /></div></CheckoutCard>
           <CheckoutCard title="Livraison"><Input label="Adresse *" value={address} onChange={setAddress} /><div className="mt-4"><Input label="Ville ou arrondissement *" value={city} onChange={setCity} /></div><label className="mt-4 block text-sm font-bold"><span className="mb-2 block">Informations complémentaires</span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-[#c9a227]" /></label></CheckoutCard>
-          <CheckoutCard title="Paiement"><button type="button" onClick={() => setPaymentSheetOpen(true)} className="flex w-full items-center justify-between rounded-xl border-2 border-[#c9a227] bg-white px-4 py-4 text-left"><span><span className="block text-xs font-bold uppercase tracking-wider text-zinc-500">Moyen sélectionné</span><span className="mt-1 block font-black">{paymentMethodLabel(paymentMethod)}</span></span><span className="text-sm font-black text-[#8a6b13]">Choisir un moyen de paiement</span></button></CheckoutCard>
+          <CheckoutCard title="Paiement"><button type="button" onClick={() => setPaymentSheetOpen(true)} aria-haspopup="dialog" className="group flex w-full items-center gap-3 rounded-xl border border-[#ddca8b] bg-[#faf8f1] px-3.5 py-3 text-left shadow-sm transition hover:border-[#c9a227] hover:bg-[#f8f3e4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a227] focus-visible:ring-offset-2"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#111827] text-[#d8b84c]"><CreditCard className="h-4.5 w-4.5" /></span><span className="min-w-0 flex-1">{paymentMethod ? <><span className="block text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-500">Moyen de paiement</span><span className="mt-0.5 block text-sm font-black text-zinc-950 sm:text-base">{paymentMethodLabel(paymentMethod)}</span></> : <><span className="block text-sm font-black text-zinc-950 sm:text-base">Choisir un moyen de paiement</span><span className="mt-0.5 block text-xs leading-5 text-zinc-500">Mobile Money, Carte bancaire ou Paiement à la livraison</span></>}</span>{paymentMethod && <span className="hidden text-xs font-bold text-[#8a6b13] sm:block">Modifier</span>}<ChevronRight className="h-5 w-5 shrink-0 text-[#a8861e] transition-transform group-hover:translate-x-0.5" aria-hidden="true" /></button></CheckoutCard>
           {onlinePaymentUnavailable && <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">{ONLINE_PAYMENT_UNAVAILABLE_MESSAGE}</p>}
-          {paymentMethod !== "cash_on_delivery" && currency !== "XOF" && <p className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950">Prix de la commande : {formatMoney(total, currency)}. PayDunya effectuera le règlement en FCFA pour un montant exact de {formatMoney(payDunyaTotalXof, "XOF")}. Votre banque ou opérateur appliquera son propre taux de change.</p>}
+          {paymentMethod && paymentMethod !== "cash_on_delivery" && currency !== "XOF" && <p className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950">Prix de la commande : {formatMoney(total, currency)}. PayDunya effectuera le règlement en FCFA pour un montant exact de {formatMoney(payDunyaTotalXof, "XOF")}. Votre banque ou opérateur appliquera son propre taux de change.</p>}
           {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p>}
-          <button type="button" onClick={handleOrder} disabled={loading || items.length === 0 || onlinePaymentUnavailable} className="w-full rounded-2xl bg-black px-5 py-4 text-lg font-black text-white shadow-lg transition hover:bg-[#c9a227] disabled:cursor-not-allowed disabled:opacity-50">{loading ? "Traitement en cours…" : checkoutButtonLabel(paymentMethod, paymentMethod === "cash_on_delivery" ? total : (currency === "XOF" ? total : payDunyaTotalXof), paymentMethod === "cash_on_delivery" ? currency : "XOF")}</button>
+          <button type="button" onClick={handleOrder} disabled={loading || items.length === 0 || !paymentMethod || onlinePaymentUnavailable} className="w-full rounded-2xl bg-black px-5 py-4 text-lg font-black text-white shadow-lg transition hover:bg-[#c9a227] disabled:cursor-not-allowed disabled:opacity-50">{loading ? "Traitement en cours…" : paymentMethod ? checkoutButtonLabel(paymentMethod, paymentMethod === "cash_on_delivery" ? total : (currency === "XOF" ? total : payDunyaTotalXof), paymentMethod === "cash_on_delivery" ? currency : "XOF") : "Choisir un moyen de paiement"}</button>
         </section>
 
         <aside className="order-1 h-fit rounded-3xl border border-[#e5e5e5] bg-white p-5 shadow-xl shadow-zinc-200/50 lg:sticky lg:top-6"><p className="text-sm font-bold tracking-[0.18em] text-[#a8861e]">RÉSUMÉ · {cartItemCount(items)} ARTICLE{cartItemCount(items) > 1 ? "S" : ""}</p><div className="mt-5 max-h-[440px] space-y-4 overflow-y-auto pr-1">{items.map((item) => <div key={item.productId} className="flex gap-3 border-b border-zinc-100 pb-4 last:border-0"><div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-zinc-100"><ProductImage src={item.image} alt={item.name} fill sizes="80px" className="object-cover" /></div><div className="min-w-0 flex-1"><p className="line-clamp-2 font-black">{item.name}</p><p className="mt-1 text-xs text-zinc-500">{formatMoney(getProductPrice(item, currency), currency)} × {item.quantity}</p><p className="mt-1 font-bold text-[#a8861e]">{formatMoney(getProductPrice(item, currency) * item.quantity, currency)}</p></div></div>)}</div><dl className="mt-5 space-y-3 border-t border-zinc-200 pt-5 text-sm"><div className="flex justify-between"><dt>Sous-total</dt><dd className="font-bold">{formatMoney(subtotal, currency)}</dd></div><div className="flex justify-between"><dt>Frais de livraison</dt><dd className="font-bold">{formatMoney(deliveryFee, currency)}</dd></div><div className="flex justify-between border-t border-zinc-200 pt-4 text-lg font-black"><dt>Total final</dt><dd className="text-[#a8861e]">{formatMoney(total, currency)}</dd></div></dl></aside>
@@ -131,7 +136,7 @@ export default function CheckoutForm({
   );
 }
 
-function PaymentSheet({ open, selected, onlinePaymentsEnabled, onClose, onSelect }: { open: boolean; selected: PaymentMethod; onlinePaymentsEnabled: boolean; onClose: () => void; onSelect: (method: PaymentMethod) => void }) {
+function PaymentSheet({ open, selected, onlinePaymentsEnabled, onClose, onSelect }: { open: boolean; selected: PaymentMethod | null; onlinePaymentsEnabled: boolean; onClose: () => void; onSelect: (method: PaymentMethod) => void }) {
   if (!open) return null;
   const icons = { mobile_money: Smartphone, card: CreditCard, cash_on_delivery: Truck };
   const methods = PAYMENT_OPTIONS.map((option) => ({ ...option, icon: icons[option.value], disabled: option.online && !onlinePaymentsEnabled }));
