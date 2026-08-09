@@ -9,7 +9,7 @@ import {
 
 export default function HeroCategoryShortcuts() {
   const [activeCategory, setActiveCategory] = useState<ProductCategoryShortcut>("all");
-  const categoryRows = [PRODUCT_CATEGORY_SHORTCUTS.slice(0, 3), PRODUCT_CATEGORY_SHORTCUTS.slice(3)];
+  const categoryRows = [PRODUCT_CATEGORY_SHORTCUTS.slice(0, 4), PRODUCT_CATEGORY_SHORTCUTS.slice(4)];
 
   function selectCategory(category: ProductCategoryShortcut) {
     setActiveCategory(category);

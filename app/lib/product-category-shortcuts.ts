@@ -7,8 +7,10 @@ export const PRODUCT_CATEGORY_SHORTCUTS = [
   { value: "snapback", label: "Snapback", terms: ["snapback"] },
   { value: "fitted", label: "Fitted", terms: ["fitted"] },
   { value: "trucker", label: "Trucker", terms: ["trucker"] },
+  { value: "adjustable", label: "Ajustable", terms: ["ajustable", "adjustable", "ajsutable"] },
   { value: "newsboy", label: "Newsboy", terms: ["newsboy", "gavroche"] },
   { value: "beanie", label: "Bonnet", terms: ["bonnet", "beanie"] },
+  { value: "watch", label: "Montre", terms: ["montre", "watch", "rolex", "casio", "tissot", "patek philippe", "richard mille", "zenmo"] },
 ] as const;
 
 export type ProductCategoryShortcut = (typeof PRODUCT_CATEGORY_SHORTCUTS)[number]["value"];
