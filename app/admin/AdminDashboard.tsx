@@ -16,7 +16,7 @@ import {
 import { isRevenueOrder, totalSalesCount } from "@/app/lib/sales-statistics";
 import { isMainAdminOrder, isUnconfirmedPayDunyaOrder } from "@/app/lib/admin-order-visibility";
 import { formatDualPrice, formatFcfaPrice } from "@/app/lib/prices";
-import { formatMoney, normalizeCurrency, SUPPORTED_CURRENCIES } from "@/app/lib/currency";
+import { calculateProductCurrencyPrices, formatMoney, normalizeCurrency, SUPPORTED_CURRENCIES } from "@/app/lib/currency";
 import { generateClientId } from "@/app/lib/client-id";
 import type { Product } from "@/app/lib/products";
 import {
@@ -38,8 +38,6 @@ type BulkProductRow = {
   name: string;
   color: string;
   price: string;
-  priceEur: string;
-  priceUsd: string;
   stock: string;
   description: string;
   error: string;
@@ -75,12 +73,12 @@ type AdminApiErrorPayload = {
   supabaseStatus?: number | null;
 };
 
+const defaultProductPrices = calculateProductCurrencyPrices(5000);
+
 const emptyProduct: ProductForm = {
   name: "",
   price: "5 000 F",
-  priceXof: 5000,
-  priceEur: 800,
-  priceUsd: 900,
+  ...defaultProductPrices,
   description: "",
   brand: "King Of Caps",
   category: "Casquette",
@@ -95,7 +93,12 @@ const fieldClassName = "w-full rounded-xl border border-gray-300 bg-white px-4 p
 const fileInputClassName = "block w-full cursor-pointer rounded-xl border border-dashed border-gray-300 bg-white p-2.5 text-sm text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:font-bold file:text-black focus:border-[#c9a227] focus:ring-1 focus:ring-[#c9a227]";
 
 function setTextField<T extends ProductForm | Product>(form: T, name: string, value: string) {
-  const numericFields = new Set(["stockQuantity", "priceXof", "priceEur", "priceUsd"]);
+  if (name === "priceXof") {
+    const prices = calculateProductCurrencyPrices(Math.max(0, Number(value) || 0));
+    return { ...form, ...prices, price: formatFcfaPrice(prices.priceXof) } as T;
+  }
+
+  const numericFields = new Set(["stockQuantity"]);
   return {
     ...form,
     [name]: numericFields.has(name) ? Math.max(0, Number(value) || 0) : value,
@@ -575,8 +578,6 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     formData.set("name", product.name);
     formData.set("price", product.price);
     formData.set("priceXof", String(product.priceXof));
-    formData.set("priceEur", String(product.priceEur / 100));
-    formData.set("priceUsd", String(product.priceUsd / 100));
     formData.set("description", product.description);
     formData.set("brand", product.brand);
     formData.set("category", product.category);
@@ -657,8 +658,6 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
         name: "",
         color: "",
         price: "5000",
-        priceEur: "8",
-        priceUsd: "9",
         stock: "1",
         description: "",
         error: "",
@@ -670,7 +669,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     setMessage((event.target.files?.length ?? 0) > 10 ? "Seules les 10 premières images ont été retenues." : "");
   }
 
-  function updateBulkProduct(id: string, updates: Partial<Pick<BulkProductRow, "name" | "color" | "price" | "priceEur" | "priceUsd" | "stock" | "description">>) {
+  function updateBulkProduct(id: string, updates: Partial<Pick<BulkProductRow, "name" | "color" | "price" | "stock" | "description">>) {
     setBulkRows((current) => current.map((row) => row.id === id ? { ...row, ...updates, error: "" } : row));
   }
 
@@ -767,7 +766,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
     }
     const invalidRows = new Set(bulkRows.filter((row) => {
       const stock = Number(row.stock);
-      return !row.name.trim() || !row.price.trim() || !row.priceEur.trim() || !row.priceUsd.trim() || !row.stock.trim() || !Number.isFinite(stock) || stock < 0;
+      return !row.name.trim() || !row.price.trim() || !row.stock.trim() || !Number.isFinite(stock) || stock < 0;
     }).map((row) => row.id));
     if (invalidRows.size > 0) {
       setBulkRows((current) => current.map((row) => invalidRows.has(row.id)
@@ -800,8 +799,6 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
           color: row.color,
           price: row.price,
           priceXof: Math.max(1, Math.round(Number(row.price))),
-          priceEur: Math.max(1, Math.round(Number(row.priceEur) * 100)),
-          priceUsd: Math.max(1, Math.round(Number(row.priceUsd) * 100)),
           stockQuantity: Math.max(0, Math.floor(Number(row.stock))),
           description: row.description,
         }, uploadedUrls);
@@ -856,8 +853,6 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
             name: editing.name,
             price: editing.price,
             priceXof: editing.priceXof,
-            priceEur: editing.priceEur,
-            priceUsd: editing.priceUsd,
             description: editing.description,
             brand: editing.brand,
             category: editing.category,
@@ -1257,8 +1252,7 @@ export default function AdminDashboard({ initialProducts, view }: { initialProdu
                     <Field label={`Nom du produit ${index + 1} *`}><input value={row.name} onChange={(event) => updateBulkProduct(row.id, { name: event.target.value })} required className={fieldClassName} /></Field>
                     <Field label="Couleur"><input value={row.color} onChange={(event) => updateBulkProduct(row.id, { color: event.target.value })} className={fieldClassName} /></Field>
                     <Field label="Prix (F) *"><input value={row.price} onChange={(event) => updateBulkProduct(row.id, { price: event.target.value })} required className={fieldClassName} /></Field>
-                    <Field label="Prix EUR *"><input type="number" min="0.01" step="0.01" value={row.priceEur} onChange={(event) => updateBulkProduct(row.id, { priceEur: event.target.value })} required className={fieldClassName} /></Field>
-                    <Field label="Prix USD *"><input type="number" min="0.01" step="0.01" value={row.priceUsd} onChange={(event) => updateBulkProduct(row.id, { priceUsd: event.target.value })} required className={fieldClassName} /></Field>
+                    <Field label="Conversions automatiques"><p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-black text-[#8a6b13]">{formatMoney(calculateProductCurrencyPrices(Number(row.price)).priceEur, "EUR")} · {formatMoney(calculateProductCurrencyPrices(Number(row.price)).priceUsd, "USD")}</p></Field>
                     <Field label="Stock"><input type="number" min="0" value={row.stock} onChange={(event) => updateBulkProduct(row.id, { stock: event.target.value })} required className={fieldClassName} /></Field>
                     <Field label="Description"><textarea value={row.description} onChange={(event) => updateBulkProduct(row.id, { description: event.target.value })} rows={2} className={`${fieldClassName} resize-y`} /></Field>
                     <button type="button" onClick={() => removeBulkProduct(row.id)} className="rounded-xl border border-red-200 px-4 py-3 text-sm font-bold text-red-600 hover:bg-red-50 lg:col-start-5">Supprimer cette ligne</button>
@@ -1591,6 +1585,7 @@ function ProductEditor({
 }) {
   const [mainPreview, setMainPreview] = useState<string | null>(null);
   const [additionalPreviews, setAdditionalPreviews] = useState<string[]>([]);
+  const convertedPrices = calculateProductCurrencyPrices(form.priceXof);
 
   useEffect(() => () => {
     if (mainPreview) URL.revokeObjectURL(mainPreview);
@@ -1621,8 +1616,7 @@ function ProductEditor({
           <Field label="Catégorie"><input name="category" value={form.category} onChange={(event) => onTextChange("category", event.target.value)} className={fieldClassName} /></Field>
           <Field label="Couleur"><input name="color" value={form.color} onChange={(event) => onTextChange("color", event.target.value)} className={fieldClassName} /></Field>
           <Field label="Prix XOF *"><input type="number" min="1" name="priceXof" value={form.priceXof} onChange={(event) => onTextChange("priceXof", event.target.value)} required className={fieldClassName} /></Field>
-          <Field label="Prix EUR (centimes) *"><input type="number" min="1" name="priceEur" value={form.priceEur} onChange={(event) => onTextChange("priceEur", event.target.value)} required className={fieldClassName} /></Field>
-          <Field label="Prix USD (cents) *"><input type="number" min="1" name="priceUsd" value={form.priceUsd} onChange={(event) => onTextChange("priceUsd", event.target.value)} required className={fieldClassName} /></Field>
+          <Field label="Conversions automatiques"><p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 font-black text-[#8a6b13]">{formatMoney(convertedPrices.priceEur, "EUR")} · {formatMoney(convertedPrices.priceUsd, "USD")}</p></Field>
           <Field label="Quantité en stock"><input type="number" min="0" name="stockQuantity" value={form.stockQuantity} onChange={(event) => onTextChange("stockQuantity", event.target.value)} className={fieldClassName} /></Field>
         </div>
       </FormSection>

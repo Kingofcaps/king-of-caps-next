@@ -1,4 +1,5 @@
 import { formatFcfaPrice } from "@/app/lib/prices";
+import { calculateProductCurrencyPrices } from "@/app/lib/currency";
 import { normalizeProductImageUrl, PRODUCT_IMAGE_FALLBACK } from "@/app/lib/product-image-url";
 
 export type Product = {
@@ -153,17 +154,13 @@ export function productRecordToProduct(record: ProductRecord): Product {
   }
 
   const legacyXof = Number(String(record.price ?? "").replace(/[^0-9]/g, "")) || 0;
-  const priceXof = Math.max(0, Math.round(Number(record.price_xof) || legacyXof));
-  const priceEur = Math.max(0, Math.round(Number(record.price_eur) || Math.round(priceXof / 655.957) * 100));
-  const priceUsd = Math.max(0, Math.round(Number(record.price_usd) || Math.round(priceXof / 555.5555555556) * 100));
+  const prices = calculateProductCurrencyPrices(Number(record.price_xof) || legacyXof);
 
   return {
     id: record.id,
     name: record.name,
-    price: formatFcfaPrice(priceXof),
-    priceXof,
-    priceEur,
-    priceUsd,
+    price: formatFcfaPrice(prices.priceXof),
+    ...prices,
     description: record.description,
     image: normalizedImage,
     images: normalizeImages(record.images, normalizedImage),
@@ -182,13 +179,14 @@ export function productRecordToProduct(record: ProductRecord): Product {
 
 function toRecord(product: Product): ProductRecord {
   const stockQuantity = Math.max(0, Math.floor(product.stockQuantity));
+  const prices = calculateProductCurrencyPrices(product.priceXof);
   return {
     id: product.id,
     name: product.name,
     price: formatFcfaPrice(product.priceXof),
-    price_xof: Math.max(0, Math.round(product.priceXof)),
-    price_eur: Math.max(0, Math.round(product.priceEur)),
-    price_usd: Math.max(0, Math.round(product.priceUsd)),
+    price_xof: prices.priceXof,
+    price_eur: prices.priceEur,
+    price_usd: prices.priceUsd,
     description: product.description,
     image: product.image,
     images: normalizeImages(product.images, product.image),

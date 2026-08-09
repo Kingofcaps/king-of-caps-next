@@ -12,6 +12,7 @@ import { recordStockMovementSafely } from "@/app/lib/stock-movements";
 import { getProductImageStoragePath } from "@/app/lib/product-images";
 import type { ProductCreatePayload } from "@/app/lib/product-create-payload";
 import { sendNewProductPushNotification } from "@/app/lib/push-notifications";
+import { calculateProductCurrencyPrices } from "@/app/lib/currency";
 
 export const runtime = "nodejs";
 
@@ -69,15 +70,14 @@ export async function POST(request: Request) {
     const name = getText(payload.name);
     const price = getText(payload.price);
     const priceXof = Math.round(getMoney(payload.priceXof) || Number(price.replace(/[^0-9]/g, "")));
-    const priceEur = Math.round(getMoney(payload.priceEur));
-    const priceUsd = Math.round(getMoney(payload.priceUsd));
+    const { priceEur, priceUsd } = calculateProductCurrencyPrices(priceXof);
     const images = validateImageUrls(payload);
 
     if (!/^[a-zA-Z0-9_-]{1,128}$/.test(productId)) {
       return NextResponse.json({ error: "L’identifiant du produit est invalide." }, { status: 400 });
     }
-    if (!name || !Number.isFinite(priceXof) || priceXof < 1 || priceEur < 1 || priceUsd < 1) {
-      return NextResponse.json({ error: "Le nom et les trois prix sont obligatoires." }, { status: 400 });
+    if (!name || !Number.isFinite(priceXof) || priceXof < 1) {
+      return NextResponse.json({ error: "Le nom et le prix XOF sont obligatoires." }, { status: 400 });
     }
 
     const products = await getProducts();

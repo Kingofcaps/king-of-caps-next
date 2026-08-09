@@ -4,6 +4,7 @@ import { ADMIN_COOKIE, isAdminToken } from "@/app/lib/admin-auth";
 import { getProduct, removeProduct, replaceProduct } from "@/app/lib/products";
 import { recordStockMovementSafely } from "@/app/lib/stock-movements";
 import { deleteProductImages } from "@/app/lib/product-images";
+import { calculateProductCurrencyPrices } from "@/app/lib/currency";
 
 export const runtime = "nodejs";
 
@@ -32,13 +33,15 @@ export async function PATCH(request: Request, context: RouteContext<"/api/admin/
       ? Math.max(0, Math.floor(payload.stockQuantity))
       : product.stockQuantity;
   const available = stockQuantity > 0;
+  const priceXof = typeof payload.priceXof === "number" && Number.isFinite(payload.priceXof)
+    ? Math.max(0, Math.round(payload.priceXof))
+    : product.priceXof;
+  const convertedPrices = calculateProductCurrencyPrices(priceXof);
   const nextProduct = {
     ...product,
     name: typeof payload.name === "string" && payload.name.trim() ? payload.name.trim() : product.name,
     price: typeof payload.price === "string" && payload.price.trim() ? payload.price.trim() : product.price,
-    priceXof: typeof payload.priceXof === "number" && Number.isFinite(payload.priceXof) ? Math.max(0, Math.round(payload.priceXof)) : product.priceXof,
-    priceEur: typeof payload.priceEur === "number" && Number.isFinite(payload.priceEur) ? Math.max(0, Math.round(payload.priceEur)) : product.priceEur,
-    priceUsd: typeof payload.priceUsd === "number" && Number.isFinite(payload.priceUsd) ? Math.max(0, Math.round(payload.priceUsd)) : product.priceUsd,
+    ...convertedPrices,
     description: typeof payload.description === "string" ? payload.description.trim() : product.description,
     brand: typeof payload.brand === "string" ? payload.brand.trim() : product.brand,
     category: typeof payload.category === "string" ? payload.category.trim() : product.category,

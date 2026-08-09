@@ -7,8 +7,6 @@ const details = {
   name: "Casquette test",
   price: "5 000 F",
   priceXof: 5000,
-  priceEur: 800,
-  priceUsd: 900,
   description: "",
   brand: "King Of Caps",
   category: "Casquette",
@@ -40,4 +38,21 @@ test("une image base64 ou blob est refusée avant la requête de création", () 
     () => buildProductCreatePayload(details, ["blob:https://admin.kingofcaps.bj/test"]),
     /URL d’images téléversées/,
   );
+});
+
+test("deux nouveaux produits avec des prix XOF différents reçoivent des conversions différentes", () => {
+  const publicUrl = "https://example.supabase.co/storage/v1/object/public/product-images/products/product-test/image.webp";
+  const productAt4000 = buildProductCreatePayload({ ...details, id: "product-4000", priceXof: 4000 }, [publicUrl]);
+  const productAt12000 = buildProductCreatePayload({ ...details, id: "product-12000", priceXof: 12000 }, [publicUrl]);
+
+  assert.deepEqual(
+    { eur: productAt4000.priceEur, usd: productAt4000.priceUsd },
+    { eur: 600, usd: 700 },
+  );
+  assert.deepEqual(
+    { eur: productAt12000.priceEur, usd: productAt12000.priceUsd },
+    { eur: 1800, usd: 2200 },
+  );
+  assert.notEqual(productAt4000.priceEur, productAt12000.priceEur);
+  assert.notEqual(productAt4000.priceUsd, productAt12000.priceUsd);
 });

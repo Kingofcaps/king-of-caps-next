@@ -8,6 +8,18 @@ export type ProductPrices = {
   priceUsd: number;
 };
 
+const CFA_FRANCS_PER_EURO = 655.957;
+const CFA_FRANCS_PER_US_DOLLAR = 555.5555555556;
+
+export function calculateProductCurrencyPrices(priceXof: number): ProductPrices {
+  const normalizedXof = Number.isFinite(priceXof) ? Math.max(0, Math.round(priceXof)) : 0;
+  return {
+    priceXof: normalizedXof,
+    priceEur: Math.round(normalizedXof / CFA_FRANCS_PER_EURO) * 100,
+    priceUsd: Math.round(normalizedXof / CFA_FRANCS_PER_US_DOLLAR) * 100,
+  };
+}
+
 export const CURRENCY_COOKIE_NAME = "koc_currency";
 
 const UEMOA_COUNTRIES = new Set(["BJ", "BF", "CI", "GW", "ML", "NE", "SN", "TG"]);

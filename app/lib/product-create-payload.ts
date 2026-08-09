@@ -1,10 +1,10 @@
+import { calculateProductCurrencyPrices } from "./currency.ts";
+
 export type ProductCreateDetails = {
   id: string;
   name: string;
   price: string;
   priceXof: number;
-  priceEur: number;
-  priceUsd: number;
   description: string;
   brand: string;
   category: string;
@@ -16,6 +16,8 @@ export type ProductCreateDetails = {
 };
 
 export type ProductCreatePayload = ProductCreateDetails & {
+  priceEur: number;
+  priceUsd: number;
   image: string;
   images: string[];
 };
@@ -39,9 +41,11 @@ export function buildProductCreatePayload(
   if (images.length === 0) throw new Error("Veuillez téléverser une image principale.");
   if (images.length > 6) throw new Error("Vous pouvez ajouter jusqu’à 5 images supplémentaires.");
   images.forEach(assertRemoteImageUrl);
+  const prices = calculateProductCurrencyPrices(details.priceXof);
 
   return {
     ...details,
+    ...prices,
     image: images[0],
     images,
   };
