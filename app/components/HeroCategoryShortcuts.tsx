@@ -9,6 +9,7 @@ import {
 
 export default function HeroCategoryShortcuts() {
   const [activeCategory, setActiveCategory] = useState<ProductCategoryShortcut>("all");
+  const categoryRows = [PRODUCT_CATEGORY_SHORTCUTS.slice(0, 3), PRODUCT_CATEGORY_SHORTCUTS.slice(3)];
 
   function selectCategory(category: ProductCategoryShortcut) {
     setActiveCategory(category);
@@ -19,22 +20,26 @@ export default function HeroCategoryShortcuts() {
   }
 
   return (
-    <nav aria-label="Raccourcis des catégories" className="mt-4 w-full max-w-[410px] sm:mt-5 sm:max-w-none">
-      <div className="grid grid-cols-3 gap-1.5 sm:flex sm:flex-wrap sm:justify-center sm:gap-2">
-        {PRODUCT_CATEGORY_SHORTCUTS.map((category) => {
-          const active = category.value === activeCategory;
-          return (
-            <button
-              key={category.value}
-              type="button"
-              aria-pressed={active}
-              onClick={() => selectCategory(category.value)}
-              className={`min-w-0 rounded-full border px-2 py-1 text-[9px] font-black uppercase tracking-[0.08em] backdrop-blur-sm transition sm:px-3 sm:py-1.5 sm:text-[10px] ${active ? "border-[#d4af37] bg-[#d4af37] text-zinc-950 shadow-sm" : "border-white/45 bg-white/15 text-white hover:border-white/80 hover:bg-white/25"}`}
-            >
-              {category.label}
-            </button>
-          );
-        })}
+    <nav aria-label="Raccourcis des catégories" className="absolute bottom-3 left-1/2 w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 sm:bottom-4">
+      <div className="flex flex-col items-center gap-1">
+        {categoryRows.map((row, rowIndex) => (
+          <div key={rowIndex} className={`flex items-center justify-center gap-1 ${rowIndex === 0 ? "-translate-x-1" : "translate-x-1"}`}>
+            {row.map((category) => {
+              const active = category.value === activeCategory;
+              return (
+                <button
+                  key={category.value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => selectCategory(category.value)}
+                  className={`shrink-0 rounded-full border px-2 py-1 text-[8px] font-black uppercase leading-none tracking-[0.06em] backdrop-blur-sm transition sm:px-2.5 sm:text-[9px] ${active ? "border-[#d4af37] bg-[#d4af37] text-zinc-950 shadow-sm" : "border-white/45 bg-white/15 text-white hover:border-white/80 hover:bg-white/25"}`}
+                >
+                  {category.value === "newsboy" ? "Newsboy / Gavroche" : category.label}
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </div>
     </nav>
   );
