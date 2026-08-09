@@ -1,5 +1,6 @@
 import Image from "next/image";
 import HomeHeader from "./components/HomeHeader";
+import HeroCategoryShortcuts from "./components/HeroCategoryShortcuts";
 import ProductGallery from "./components/ProductGallery";
 import StorefrontBottom from "./components/StorefrontBottom";
 import { getProducts } from "./lib/products";
@@ -80,6 +81,7 @@ export default async function Home() {
           <p className="mt-5 max-w-xl text-lg text-white/80 sm:text-xl">
             Le royaume de la casquette au Bénin
           </p>
+          <HeroCategoryShortcuts />
         </div>
       </section>
 

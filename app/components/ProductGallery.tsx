@@ -11,6 +11,11 @@ import TrendingProducts from "./TrendingProducts";
 import { useCurrency } from "./CurrencyProvider";
 import FavoriteButton from "./FavoriteButton";
 import { productWhatsAppOrderUrl } from "@/app/lib/product-whatsapp";
+import {
+  matchesProductCategoryShortcut,
+  PRODUCT_CATEGORY_EVENT,
+  type ProductCategoryShortcut,
+} from "@/app/lib/product-category-shortcuts";
 
 function getOrderUrl(product: Product, currency: Currency) {
   const formattedPrice = formatMoney(getProductPrice(product, currency), currency);
@@ -20,28 +25,36 @@ function getOrderUrl(product: Product, currency: Currency) {
 export default function ProductGallery({ products }: { products: Product[] }) {
   const { currency } = useCurrency();
   const [search, setSearch] = useState("");
+  const [category, setCategory] = useState<ProductCategoryShortcut>("all");
 
   useEffect(() => {
     function handleSearch(event: Event) {
       setSearch((event as CustomEvent<string>).detail);
     }
 
+    function handleCategory(event: Event) {
+      setCategory((event as CustomEvent<ProductCategoryShortcut>).detail);
+    }
+
     window.addEventListener("king-of-caps-search", handleSearch);
-    return () => window.removeEventListener("king-of-caps-search", handleSearch);
+    window.addEventListener(PRODUCT_CATEGORY_EVENT, handleCategory);
+    return () => {
+      window.removeEventListener("king-of-caps-search", handleSearch);
+      window.removeEventListener(PRODUCT_CATEGORY_EVENT, handleCategory);
+    };
   }, []);
 
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return products;
-
     return products.filter(
       (product) =>
-        product.name.toLowerCase().includes(query) || product.image.toLowerCase().includes(query),
+        matchesProductCategoryShortcut(product, category)
+        && (!query || product.name.toLowerCase().includes(query) || product.image.toLowerCase().includes(query)),
     );
-  }, [products, search]);
+  }, [category, products, search]);
 
   return (
-    <section id="collection" className="mx-auto max-w-7xl px-5 pb-12 pt-2 sm:px-8 sm:pb-16 sm:pt-3">
+    <section id="collection" className="mx-auto max-w-7xl scroll-mt-2 px-5 pb-12 pt-2 sm:px-8 sm:pb-16 sm:pt-3">
       <TrendingProducts products={products} />
 
       <div className="mt-3 text-center">
