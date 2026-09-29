@@ -10,6 +10,7 @@ import { checkoutButtonLabel, paymentMethodLabel, PAYMENT_OPTIONS } from "@/app/
 import { generateCheckoutId } from "@/app/lib/client-id";
 import type { PaymentMethod } from "@/app/lib/orders";
 import { formatMoney, getProductPrice } from "@/app/lib/currency";
+import { calculateCheckoutTotals, payDunyaTotalWithServiceFee } from "@/app/lib/checkout-pricing";
 import { useCurrency } from "@/app/components/CurrencyProvider";
 import CurrencySelector from "@/app/components/CurrencySelector";
 import { isValidEmail } from "@/app/lib/validation";
@@ -45,9 +46,8 @@ export default function CheckoutForm({
   const [error, setError] = useState("");
 
   const subtotal = useMemo(() => cartSubtotal(items, currency), [items, currency]);
-  const payDunyaTotalXof = useMemo(() => cartSubtotal(items, "XOF"), [items]);
-  const deliveryFee = 0;
-  const total = subtotal + deliveryFee;
+  const payDunyaTotalXof = useMemo(() => payDunyaTotalWithServiceFee(cartSubtotal(items, "XOF")), [items]);
+  const { serviceFee, total } = useMemo(() => calculateCheckoutTotals(subtotal, currency), [subtotal, currency]);
   const onlinePaymentUnavailable = !onlinePaymentsEnabled && paymentMethod !== null && paymentMethod !== "cash_on_delivery";
 
   async function handleOrder() {
@@ -128,7 +128,7 @@ export default function CheckoutForm({
           <button type="button" onClick={handleOrder} disabled={loading || items.length === 0 || !paymentMethod || onlinePaymentUnavailable} className="w-full rounded-2xl bg-black px-5 py-4 text-lg font-black text-white shadow-lg transition hover:bg-[#c9a227] disabled:cursor-not-allowed disabled:opacity-50">{loading ? "Traitement en cours…" : paymentMethod ? checkoutButtonLabel(paymentMethod, paymentMethod === "cash_on_delivery" ? total : (currency === "XOF" ? total : payDunyaTotalXof), paymentMethod === "cash_on_delivery" ? currency : "XOF") : "Choisir un moyen de paiement"}</button>
         </section>
 
-        <aside className="order-1 h-fit rounded-3xl border border-[#e5e5e5] bg-white p-5 shadow-xl shadow-zinc-200/50 lg:sticky lg:top-6"><p className="text-sm font-bold tracking-[0.18em] text-[#a8861e]">RÉSUMÉ · {cartItemCount(items)} ARTICLE{cartItemCount(items) > 1 ? "S" : ""}</p><div className="mt-5 max-h-[440px] space-y-4 overflow-y-auto pr-1">{items.map((item) => <div key={item.productId} className="flex gap-3 border-b border-zinc-100 pb-4 last:border-0"><div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-zinc-100"><ProductImage src={item.image} alt={item.name} fill sizes="80px" className="object-cover" /></div><div className="min-w-0 flex-1"><p className="line-clamp-2 font-black">{item.name}</p><p className="mt-1 text-xs text-zinc-500">{formatMoney(getProductPrice(item, currency), currency)} × {item.quantity}</p><p className="mt-1 font-bold text-[#a8861e]">{formatMoney(getProductPrice(item, currency) * item.quantity, currency)}</p></div></div>)}</div><dl className="mt-5 space-y-3 border-t border-zinc-200 pt-5 text-sm"><div className="flex justify-between"><dt>Sous-total</dt><dd className="font-bold">{formatMoney(subtotal, currency)}</dd></div><div className="flex justify-between"><dt>Frais de livraison</dt><dd className="font-bold">{formatMoney(deliveryFee, currency)}</dd></div><div className="flex justify-between border-t border-zinc-200 pt-4 text-lg font-black"><dt>Total final</dt><dd className="text-[#a8861e]">{formatMoney(total, currency)}</dd></div></dl></aside>
+        <aside className="order-1 h-fit rounded-3xl border border-[#e5e5e5] bg-white p-5 shadow-xl shadow-zinc-200/50 lg:sticky lg:top-6"><p className="text-sm font-bold tracking-[0.18em] text-[#a8861e]">RÉSUMÉ · {cartItemCount(items)} ARTICLE{cartItemCount(items) > 1 ? "S" : ""}</p><div className="mt-5 max-h-[440px] space-y-4 overflow-y-auto pr-1">{items.map((item) => <div key={item.productId} className="flex gap-3 border-b border-zinc-100 pb-4 last:border-0"><div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-zinc-100"><ProductImage src={item.image} alt={item.name} fill sizes="80px" className="object-cover" /></div><div className="min-w-0 flex-1"><p className="line-clamp-2 font-black">{item.name}</p><p className="mt-1 text-xs text-zinc-500">{formatMoney(getProductPrice(item, currency), currency)} × {item.quantity}</p><p className="mt-1 font-bold text-[#a8861e]">{formatMoney(getProductPrice(item, currency) * item.quantity, currency)}</p></div></div>)}</div><dl className="mt-5 space-y-3 border-t border-zinc-200 pt-5 text-sm"><div className="flex justify-between"><dt>Sous-total</dt><dd className="font-bold">{formatMoney(subtotal, currency)}</dd></div><div className="flex justify-between"><dt>Frais de service</dt><dd className="font-bold">{formatMoney(serviceFee, currency)}</dd></div><div className="flex justify-between border-t border-zinc-200 pt-4 text-lg font-black"><dt>Total final</dt><dd className="text-[#a8861e]">{formatMoney(total, currency)}</dd></div></dl></aside>
       </div>
 
       <PaymentSheet open={paymentSheetOpen} selected={paymentMethod} onlinePaymentsEnabled={onlinePaymentsEnabled} onClose={() => setPaymentSheetOpen(false)} onSelect={(method) => { setPaymentMethod(method); setError(""); setPaymentSheetOpen(false); }} />

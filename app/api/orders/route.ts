@@ -6,6 +6,7 @@ import {
 } from "@/app/lib/paydunya";
 import { notifyNewOrder, sendCustomerOrderConfirmation } from "@/app/lib/order-notifications";
 import { isOnlinePaymentMethod, startOrderPayment } from "@/app/lib/payment-workflows";
+import { SERVICE_FEE_XOF, calculateCheckoutTotals, payDunyaTotalWithServiceFee } from "@/app/lib/checkout-pricing";
 import {
   createOrderWithItems,
   createOrderNumber,
@@ -130,9 +131,18 @@ export async function POST(request: Request) {
         };
       });
       const subtotalAmount = orderItems.reduce((total, item) => total + item.line_total, 0);
-      const deliveryFee = 0;
-      const totalAmount = subtotalAmount + deliveryFee;
-      const payDunyaTotalAmount = payDunyaItems.reduce((total, item) => total + item.line_total, 0);
+      const { serviceFee, total: totalAmount } = calculateCheckoutTotals(subtotalAmount, currency);
+      const payDunyaSubtotalAmount = payDunyaItems.reduce((total, item) => total + item.line_total, 0);
+      const payDunyaTotalAmount = payDunyaTotalWithServiceFee(payDunyaSubtotalAmount);
+      const payDunyaInvoiceItems = [
+        ...payDunyaItems,
+        {
+          product_name: "Frais de service",
+          quantity: 1,
+          unit_price: SERVICE_FEE_XOF,
+          line_total: SERVICE_FEE_XOF,
+        },
+      ];
       const firstItem = orderItems[0];
 
       const orderNumber = await createOrderNumber();
@@ -144,7 +154,7 @@ export async function POST(request: Request) {
         quantity: orderItems.reduce((total, item) => total + item.quantity, 0),
         unit_price: firstItem.unit_price,
         subtotal_amount: subtotalAmount,
-        delivery_fee: deliveryFee,
+        delivery_fee: serviceFee,
         total_amount: totalAmount,
         currency,
         payment_currency: isOnlinePayment ? "XOF" : currency,
@@ -196,7 +206,7 @@ export async function POST(request: Request) {
             console.error(`Échec de la confirmation client pour la commande ${order.order_number}.`, emailResults[1].reason);
           }
         },
-        createOnlineInvoice: (paymentMethod) => createPayDunyaCheckout({ ...orderDetails, total_amount: payDunyaTotalAmount, items: payDunyaItems }, paymentMethod),
+        createOnlineInvoice: (paymentMethod) => createPayDunyaCheckout({ ...orderDetails, total_amount: payDunyaTotalAmount, items: payDunyaInvoiceItems }, paymentMethod),
         createAwaitingPaymentOrder: (token) => createMultiProductOrder("awaiting_payment", token),
         reserveOnlineStock: reserveOrCancel,
       });
