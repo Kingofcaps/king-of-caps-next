@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import { ArrowUpRight, Download, MapPin, ShoppingBag } from "lucide-react";
+import { ArrowUpRight, Download, MapPin, Phone, ShoppingBag } from "lucide-react";
 import { createBrandedQrSvg } from "../lib/qr-code";
 import { absoluteUrl, SITE_NAME } from "../lib/seo";
 
@@ -68,12 +68,17 @@ function SnapchatIcon({ className }: IconProps) {
 
 type LinkItem = {
   label: string;
-  handle: string;
+  handle?: string;
   href: string;
   Icon: (props: IconProps) => React.ReactElement;
 };
 
 const links: LinkItem[] = [
+  {
+    label: "+229 0150687515",
+    href: "tel:+2290150687515",
+    Icon: ({ className }) => <Phone aria-hidden="true" className={className} />,
+  },
   {
     label: "Site officiel",
     handle: "kingofcaps.bj",
@@ -146,8 +151,8 @@ export default async function LinksPage() {
             <a
               key={label}
               href={href!}
-              target="_blank"
-              rel="noopener noreferrer"
+              target={href.startsWith("tel:") ? undefined : "_blank"}
+              rel={href.startsWith("tel:") ? undefined : "noopener noreferrer"}
               className="group flex min-h-16 items-center gap-4 rounded-2xl border border-[#d4af37]/30 bg-white/[0.03] px-5 py-3 transition duration-300 hover:-translate-y-0.5 hover:border-[#d4af37] hover:bg-[#d4af37]/10 hover:shadow-[0_8px_30px_rgba(212,175,55,0.15)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4af37] active:scale-[0.98] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
             >
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#d4af37]/15 text-[#d4af37]">
@@ -155,7 +160,7 @@ export default async function LinksPage() {
               </span>
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="text-sm font-semibold uppercase tracking-widest">{label}</span>
-                <span className="truncate text-xs text-white/50">{handle}</span>
+                {handle && <span className="truncate text-xs text-white/50">{handle}</span>}
               </span>
               <ArrowUpRight
                 aria-hidden="true"
