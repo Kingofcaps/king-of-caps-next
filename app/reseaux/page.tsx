@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import { ArrowUpRight, Download, ShoppingBag } from "lucide-react";
-import { createBrandedQrPng } from "../lib/qr-code";
+import { createBrandedQrSvg } from "../lib/qr-code";
 import { absoluteUrl, SITE_NAME, SITE_URL } from "../lib/seo";
 
 const PAGE_PATH = "/reseaux";
@@ -133,7 +133,7 @@ const links: LinkItem[] = [
 
 export default async function LinksPage() {
   const pageUrl = absoluteUrl(PAGE_PATH);
-  const qrDataUrl = await createBrandedQrPng(pageUrl);
+  const qrDataUrl = createBrandedQrSvg(pageUrl);
   const visibleLinks = links.filter((link) => link.href);
 
   return (
@@ -202,13 +202,13 @@ export default async function LinksPage() {
           />
           <a
             href={qrDataUrl}
-            download="king-of-caps-reseaux-qr.png"
+            download="king-of-caps-reseaux-qr.svg"
             className="mt-5 inline-flex min-h-12 items-center gap-2 rounded-full bg-[#d4af37] px-6 text-sm font-semibold uppercase tracking-widest text-black transition duration-300 hover:bg-[#e6c35c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4af37] active:scale-95"
           >
             <Download aria-hidden="true" className="h-4 w-4" />
-            Télécharger en PNG
+            Télécharger en SVG
           </a>
-          <p className="mt-3 text-[11px] text-white/40">PNG 2000 × 2000 px, prêt pour l’impression.</p>
+          <p className="mt-3 text-[11px] text-white/40">Format vectoriel, prêt pour l’impression.</p>
         </section>
 
         <p className="mt-10 text-[11px] uppercase tracking-[0.25em] text-white/30">© KING OF CAPS</p>
