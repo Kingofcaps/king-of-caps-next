@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import { ArrowUpRight, Download, ShoppingBag } from "lucide-react";
+import { ArrowUpRight, Download, MapPin, ShoppingBag } from "lucide-react";
 import { createBrandedQrSvg } from "../lib/qr-code";
-import { absoluteUrl, SITE_NAME, SITE_URL } from "../lib/seo";
+import { absoluteUrl, SITE_NAME } from "../lib/seo";
 
 const PAGE_PATH = "/reseaux";
 const TITLE = "Nos liens officiels";
 const DESCRIPTION =
-  "Retrouvez KING OF CAPS sur Instagram, TikTok, WhatsApp et sur la boutique en ligne. Casquettes à Cotonou, Bénin.";
+  "Retrouvez KING OF CAPS sur sa boutique, Instagram, WhatsApp, TikTok, Snapchat et à Cotonou, Bénin.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -66,44 +66,25 @@ function SnapchatIcon({ className }: IconProps) {
   );
 }
 
-function FacebookIcon({ className }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
-      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-    </svg>
-  );
-}
-
-function configuredUrl(value: string | undefined) {
-  const trimmed = value?.trim();
-  if (!trimmed) return null;
-  try {
-    const url = new URL(trimmed);
-    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
-  } catch {
-    return null;
-  }
-}
-
 type LinkItem = {
   label: string;
   handle: string;
-  href: string | null;
+  href: string;
   Icon: (props: IconProps) => React.ReactElement;
 };
 
 const links: LinkItem[] = [
   {
+    label: "Site officiel",
+    handle: "kingofcaps.bj",
+    href: "https://kingofcaps.bj",
+    Icon: ({ className }) => <ShoppingBag aria-hidden="true" className={className} />,
+  },
+  {
     label: "Instagram",
     handle: "@king_0f_caps",
     href: "https://www.instagram.com/king_0f_caps/",
     Icon: InstagramIcon,
-  },
-  {
-    label: "TikTok",
-    handle: "@king.of.caps_",
-    href: "https://www.tiktok.com/@king.of.caps_",
-    Icon: TikTokIcon,
   },
   {
     label: "WhatsApp",
@@ -112,29 +93,29 @@ const links: LinkItem[] = [
     Icon: WhatsAppIcon,
   },
   {
+    label: "TikTok",
+    handle: "@king.of.caps_",
+    href: "https://www.tiktok.com/@king.of.caps_",
+    Icon: TikTokIcon,
+  },
+  {
     label: "Snapchat",
     handle: "KING OF CAPS",
     href: "https://snapchat.com/t/cJjmmhND",
     Icon: SnapchatIcon,
   },
   {
-    label: "Boutique en ligne",
-    handle: SITE_URL.replace(/^https?:\/\//, ""),
-    href: SITE_URL,
-    Icon: ({ className }) => <ShoppingBag aria-hidden="true" className={className} />,
-  },
-  {
-    label: "Facebook",
-    handle: "KING OF CAPS",
-    href: configuredUrl(process.env.NEXT_PUBLIC_FACEBOOK_URL),
-    Icon: FacebookIcon,
+    label: "Nous trouver",
+    handle: "Cotonou, Bénin · Google Maps",
+    href: "https://maps.app.goo.gl/7HGkxsQwZAET7Xis6?g_st=ic",
+    Icon: ({ className }) => <MapPin aria-hidden="true" className={className} />,
   },
 ];
 
 export default async function LinksPage() {
   const pageUrl = absoluteUrl(PAGE_PATH);
   const qrDataUrl = createBrandedQrSvg(pageUrl);
-  const visibleLinks = links.filter((link) => link.href);
+  const visibleLinks = links;
 
   return (
     <main className="relative flex min-h-screen flex-col items-center overflow-hidden bg-black px-5 py-12 text-white">
