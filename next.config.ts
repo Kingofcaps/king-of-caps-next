@@ -25,6 +25,9 @@ const nextConfig: NextConfig = {
     ...localNetworkOrigins,
   ])],
   images: { remotePatterns: productImageRemotePatterns },
+  async redirects() {
+    return [{ source: "/liens", destination: "/reseaux", permanent: true }];
+  },
 };
 
 export default nextConfig;

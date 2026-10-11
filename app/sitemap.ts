@@ -21,6 +21,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 1,
       images: [absoluteUrl("/images/boutique.jpg")],
     },
+    {
+      url: absoluteUrl("/reseaux"),
+      changeFrequency: "monthly" as const,
+      priority: 0.5,
+    },
     ...[
       "/cgu",
       "/politique-confidentialite",
