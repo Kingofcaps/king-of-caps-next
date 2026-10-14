@@ -11,6 +11,9 @@ type CheckoutOrder = {
   customer_last_name: string;
   customer_email: string | null;
   customer_phone: string;
+  customer_address?: string;
+  customer_city?: string;
+  customer_note?: string | null;
   items: Array<{
     product_name: string;
     quantity: number;
@@ -24,6 +27,10 @@ type PayDunyaCreateResponse = {
   response_text?: string;
   description?: string;
   token?: string;
+  errors?: {
+    message?: string;
+    description?: string;
+  };
 };
 
 export type PayDunyaPaymentStatus = "pending" | "completed" | "cancelled" | "failed";
@@ -31,6 +38,10 @@ export type PayDunyaPaymentStatus = "pending" | "completed" | "cancelled" | "fai
 export type PayDunyaConfirmation = {
   response_code?: string;
   response_text?: string;
+  errors?: {
+    message?: string;
+    description?: string;
+  };
   hash?: string;
   invoice?: {
     token?: string;
@@ -50,7 +61,6 @@ export function isPayDunyaConfigured() {
   return Boolean(
     process.env.PAYDUNYA_MASTER_KEY?.trim()
     && process.env.PAYDUNYA_PRIVATE_KEY?.trim()
-    && process.env.PAYDUNYA_PUBLIC_KEY?.trim()
     && process.env.PAYDUNYA_TOKEN?.trim(),
   );
 }
@@ -58,17 +68,15 @@ export function isPayDunyaConfigured() {
 function getConfig() {
   const masterKey = process.env.PAYDUNYA_MASTER_KEY?.trim();
   const privateKey = process.env.PAYDUNYA_PRIVATE_KEY?.trim();
-  const publicKey = process.env.PAYDUNYA_PUBLIC_KEY?.trim();
   const token = process.env.PAYDUNYA_TOKEN?.trim();
 
-  if (!masterKey || !privateKey || !publicKey || !token) {
+  if (!masterKey || !privateKey || !token) {
     throw new Error("PayDunya n’est pas encore configuré.");
   }
 
   return {
     masterKey,
     privateKey,
-    publicKey,
     token,
     siteUrl: SITE_URL,
     baseUrl: PAYDUNYA_API_URL,
@@ -94,42 +102,84 @@ function payDunyaCheckoutUrlFromResponse(value: string) {
   }
 }
 
-function maskedPayDunyaValue(value: string) {
-  try {
-    const url = new URL(value);
-    const segments = url.pathname.split("/");
-    const lastSegment = segments.findLastIndex(Boolean);
-    if (lastSegment >= 0) segments[lastSegment] = "[REDACTED]";
-    url.pathname = segments.join("/");
-    url.search = "";
-    url.hash = "";
-    return url.toString();
-  } catch {
-    return value.slice(0, 500);
-  }
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function sanitizedPayDunyaBody(rawBody: string, config: ReturnType<typeof getConfig>) {
-  const secrets = [config.masterKey, config.privateKey, config.publicKey, config.token];
-  let sanitized = rawBody;
-  for (const secret of secrets) sanitized = sanitized.replaceAll(secret, "[REDACTED]");
-  return sanitized
-    .replace(/("token"\s*:\s*")[^"]+("?)/gi, "$1[REDACTED]$2")
-    .replace(/(\/checkout\/invoice\/)[^"?\s/]+/gi, "$1[REDACTED]")
-    .slice(0, 4_000);
+function safePayDunyaMessage(
+  value: unknown,
+  config: ReturnType<typeof getConfig>,
+  order?: CheckoutOrder,
+  additionalSensitiveValues: string[] = [],
+) {
+  if (typeof value !== "string" || !value.trim()) return "Aucun message exploitable retourné par PayDunya.";
+
+  let message = value.slice(0, 1_000);
+  for (const sensitiveValue of [
+    config.masterKey,
+    config.privateKey,
+    config.token,
+    ...(order ? [
+      `${order.customer_first_name} ${order.customer_last_name}`.trim(),
+      order.order_number,
+      order.customer_first_name,
+      order.customer_last_name,
+      order.customer_email ?? "",
+      order.customer_phone,
+      order.customer_address ?? "",
+      order.customer_city ?? "",
+      order.customer_note ?? "",
+    ] : []),
+    ...additionalSensitiveValues,
+  ]) {
+    if (sensitiveValue.length > 1) {
+      message = message.replace(new RegExp(escapeRegExp(sensitiveValue), "gi"), "[EXPURGÉ]");
+    }
+  }
+
+  return message
+    .replace(/https?:\/\/[^\s"'<>]+/gi, "[URL EXPURGÉE]")
+    .replace(/[\w.+-]+@[\w.-]+\.[A-Z]{2,}/gi, "[EMAIL EXPURGÉ] ")
+    .replace(/\b(token|authorization|api[-_ ]?key|secret|card|pan)\s*[:=]\s*[^\s,;]+/gi, "$1=[EXPURGÉ]")
+    .replace(/(?:\+?\d[\d\s().-]{5,}\d)/g, "[NUMÉRO EXPURGÉ]")
+    .replace(/\b(?:\d[ -]*?){13,19}\b/g, "[NUMÉRO EXPURGÉ]")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 240);
+}
+
+function safeResponseCode(value: unknown) {
+  return typeof value === "string" && /^[a-z\d_-]{1,32}$/i.test(value) ? value : null;
+}
+
+function payDunyaResponseMessage(payload: PayDunyaCreateResponse) {
+  return payload.errors?.description
+    ?? payload.errors?.message
+    ?? payload.description
+    ?? payload.response_text
+    ?? "Aucun message exploitable retourné par PayDunya.";
 }
 
 function logPayDunyaCreateError(
-  response: Response,
-  rawBody: string,
+  paymentMethod: Extract<PaymentMethod, "mobile_money" | "card">,
+  httpStatus: number | null,
+  responseCode: string | null,
+  message: unknown,
   config: ReturnType<typeof getConfig>,
-  reason: string,
+  order: CheckoutOrder,
 ) {
-  console.error("Erreur de création de facture PayDunya :", {
-    reason,
-    httpStatus: response.status,
-    responseBody: sanitizedPayDunyaBody(rawBody, config),
+  console.error("Échec de création de facture PayDunya", {
+    phase: "invoice_creation",
+    paymentMethod,
+    httpStatus,
+    responseCode,
+    errorMessage: safePayDunyaMessage(message, config, order),
   });
+}
+
+export function safePayDunyaErrorName(error: unknown) {
+  const name = error instanceof Error ? error.name : "Error";
+  return /^[A-Za-z][A-Za-z0-9_.-]{0,39}$/.test(name) ? name : "Error";
 }
 
 function normalizeStatus(value: string | undefined): PayDunyaPaymentStatus {
@@ -157,74 +207,97 @@ export async function createPayDunyaCheckout(
   fetcher: typeof fetch = fetch,
 ) {
   const config = getConfig();
-  const response = await fetcher(`${config.baseUrl}/create`, {
-    method: "POST",
-    headers: apiHeaders(config),
-    body: JSON.stringify({
-      invoice: {
-        items: Object.fromEntries(order.items.map((item, index) => [`item_${index}`, {
-          name: item.product_name,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          total_price: item.line_total,
-          description: `Commande ${order.order_number}`,
-        }])),
-        customer: {
-          name: `${order.customer_first_name} ${order.customer_last_name}`.trim(),
-          email: order.customer_email ?? "",
-          phone: order.customer_phone,
+  let response: Response;
+  try {
+    response = await fetcher(`${config.baseUrl}/create`, {
+      method: "POST",
+      headers: apiHeaders(config),
+      body: JSON.stringify({
+        invoice: {
+          items: Object.fromEntries(order.items.map((item, index) => [`item_${index}`, {
+            name: item.product_name,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            total_price: item.line_total,
+            description: `Commande ${order.order_number}`,
+          }])),
+          customer: {
+            name: `${order.customer_first_name} ${order.customer_last_name}`.trim(),
+            email: order.customer_email ?? "",
+            phone: order.customer_phone,
+          },
+          channels: paymentMethod === "card" ? ["card"] : ["mtn-benin", "moov-benin", "celtiis-cash"],
+          total_amount: order.total_amount,
+          description: `Commande KING OF CAPS ${order.order_number}`,
         },
-        channels: paymentMethod === "card" ? ["card"] : ["mtn-benin", "moov-benin"],
-        total_amount: order.total_amount,
-        description: `Commande KING OF CAPS ${order.order_number}`,
-      },
-      store: {
-        name: "KING OF CAPS",
-        tagline: "Plus qu’une casquette, une identité.",
-        phone: "+22950687515",
-        website_url: config.siteUrl,
-      },
-      custom_data: {
-        order_number: order.order_number,
-        currency: "XOF",
-      },
-      actions: {
-        cancel_url: `${config.siteUrl}/api/payments/paydunya/cancel`,
-        return_url: `${config.siteUrl}/api/payments/paydunya/return`,
-        callback_url: `${config.siteUrl}/api/paydunya/ipn`,
-      },
-    }),
-    cache: "no-store",
-  });
+        store: {
+          name: "KING OF CAPS",
+          tagline: "Plus qu’une casquette, une identité.",
+          phone: "+22950687515",
+          website_url: config.siteUrl,
+        },
+        custom_data: {
+          order_number: order.order_number,
+          currency: "XOF",
+        },
+        actions: {
+          cancel_url: `${config.siteUrl}/api/payments/paydunya/cancel`,
+          return_url: `${config.siteUrl}/api/payments/paydunya/return`,
+          callback_url: `${config.siteUrl}/api/paydunya/ipn`,
+        },
+      }),
+      cache: "no-store",
+    });
+  } catch (error) {
+    logPayDunyaCreateError(
+      paymentMethod,
+      null,
+      null,
+      error instanceof Error ? error.message : "Échec de connexion à PayDunya.",
+      config,
+      order,
+    );
+    throw new Error("Impossible de joindre PayDunya pour créer la facture.");
+  }
 
   const rawBody = await response.text();
   let payload: PayDunyaCreateResponse = {};
   try {
     payload = JSON.parse(rawBody) as PayDunyaCreateResponse;
   } catch {
-    logPayDunyaCreateError(response, rawBody, config, "Réponse non JSON.");
+    logPayDunyaCreateError(paymentMethod, response.status, null, "Réponse non JSON.", config, order);
     throw new Error("PayDunya a retourné une réponse illisible.");
   }
 
+  const responseCode = safeResponseCode(payload.response_code);
   if (!response.ok || payload.response_code !== "00") {
-    logPayDunyaCreateError(response, rawBody, config, "Facture refusée par PayDunya.");
-    throw new Error(payload.description || payload.response_text || "Impossible de créer la facture PayDunya.");
+    const errorMessage = payDunyaResponseMessage(payload);
+    logPayDunyaCreateError(paymentMethod, response.status, responseCode, errorMessage, config, order);
+    throw new Error("PayDunya a refusé la création de la facture.");
   }
 
   const responseUrl = payload.response_text?.trim() ?? "";
   const responseToken = payload.token?.trim() ?? "";
   const checkoutUrl = payDunyaCheckoutUrlFromResponse(responseUrl);
 
-  console.info("Réponse de création de facture PayDunya :", {
+  console.info("Facture PayDunya créée", {
+    phase: "invoice_creation",
+    paymentMethod,
     httpStatus: response.status,
-    responseCode: payload.response_code ?? null,
-    responseText: maskedPayDunyaValue(responseUrl),
+    responseCode,
     tokenPresent: Boolean(responseToken),
-    checkoutUrl: checkoutUrl ? maskedPayDunyaValue(checkoutUrl) : null,
+    checkoutUrlHost: checkoutUrl ? new URL(checkoutUrl).hostname : null,
   });
 
   if (!responseToken || !checkoutUrl) {
-    logPayDunyaCreateError(response, rawBody, config, "Token ou URL de facture manquant.");
+    logPayDunyaCreateError(
+      paymentMethod,
+      response.status,
+      responseCode,
+      "Token ou URL de facture manquant.",
+      config,
+      order,
+    );
     throw new Error("PayDunya n’a pas retourné une facture de paiement valide.");
   }
 
@@ -239,13 +312,38 @@ export async function verifyPayDunyaPayment(
   if (!token) throw new Error("Token PayDunya manquant.");
 
   const config = getConfig();
-  const response = await fetcher(`${config.baseUrl}/confirm/${encodeURIComponent(token)}`, {
-    method: "GET",
-    headers: apiHeaders(config),
-    cache: "no-store",
-  });
-  const payload = (await response.json().catch(() => ({}))) as PayDunyaConfirmation;
+  let response: Response;
+  try {
+    response = await fetcher(`${config.baseUrl}/confirm/${encodeURIComponent(token)}`, {
+      method: "GET",
+      headers: apiHeaders(config),
+      cache: "no-store",
+    });
+  } catch (error) {
+    console.error("Échec de vérification de paiement PayDunya", {
+      phase: "payment_confirmation",
+      httpStatus: null,
+      responseCode: null,
+      errorType: safePayDunyaErrorName(error),
+    });
+    throw new Error("Impossible de vérifier le paiement PayDunya.");
+  }
 
+  const rawBody = await response.text();
+  let payload: PayDunyaConfirmation = {};
+  try {
+    payload = JSON.parse(rawBody) as PayDunyaConfirmation;
+  } catch {
+    console.error("Réponse de vérification PayDunya illisible", {
+      phase: "payment_confirmation",
+      httpStatus: response.status,
+      responseCode: null,
+      errorMessage: "Réponse non JSON.",
+    });
+    throw new Error("La réponse de vérification PayDunya est illisible.");
+  }
+
+  const responseCode = safeResponseCode(payload.response_code);
   if (
     !response.ok
     || payload.response_code !== "00"
@@ -253,8 +351,21 @@ export async function verifyPayDunyaPayment(
     || !payload.hash
     || !verifyPayDunyaHash(payload.hash)
   ) {
+    console.error("Échec de vérification de paiement PayDunya", {
+      phase: "payment_confirmation",
+      httpStatus: response.status,
+      responseCode,
+      errorMessage: "PayDunya n’a pas confirmé la transaction.",
+    });
     throw new Error("La transaction PayDunya n’a pas pu être vérifiée.");
   }
+
+  console.info("Paiement PayDunya vérifié", {
+    phase: "payment_confirmation",
+    httpStatus: response.status,
+    responseCode,
+    paymentStatus: normalizeStatus(payload.status),
+  });
 
   return {
     token,

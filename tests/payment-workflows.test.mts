@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, test } from "node:test";
-import { createPayDunyaCheckout, verifyPayDunyaPayment } from "../app/lib/paydunya.ts";
+import { createPayDunyaCheckout, isPayDunyaConfigured, verifyPayDunyaPayment } from "../app/lib/paydunya.ts";
 import { processPayDunyaPayment, startOrderPayment } from "../app/lib/payment-workflows.ts";
 
 const originalEnvironment = { ...process.env };
@@ -9,7 +9,7 @@ const originalEnvironment = { ...process.env };
 beforeEach(() => {
   process.env.PAYDUNYA_MASTER_KEY = "master-key";
   process.env.PAYDUNYA_PRIVATE_KEY = "private-key";
-  process.env.PAYDUNYA_PUBLIC_KEY = "public-key";
+  delete process.env.PAYDUNYA_PUBLIC_KEY;
   process.env.PAYDUNYA_TOKEN = "application-token";
 });
 
@@ -19,12 +19,18 @@ afterEach(() => {
 
 const checkoutOrder = {
   order_number: "KOC-0001",
-  total_amount: 5000,
+  total_amount: 5100,
   customer_first_name: "Awa",
   customer_last_name: "Mensah",
   customer_email: "awa@example.com",
   customer_phone: "97000000",
-  items: [{ product_name: "Produit A", quantity: 1, unit_price: 5000, line_total: 5000 }],
+  customer_address: "12 Rue des Casquettes",
+  customer_city: "Cotonou",
+  customer_note: "Livrer après 18h",
+  items: [
+    { product_name: "Produit A", quantity: 1, unit_price: 5000, line_total: 5000 },
+    { product_name: "Frais de service", quantity: 1, unit_price: 100, line_total: 100 },
+  ],
 };
 
 function payDunyaFetcher(onBody: (body: Record<string, unknown>) => void) {
@@ -45,6 +51,10 @@ function payDunyaFetcher(onBody: (body: Record<string, unknown>) => void) {
   }) as typeof fetch;
 }
 
+test("la clé publique n’est pas requise pour configurer l’API HTTP/JSON", () => {
+  assert.equal(isPayDunyaConfigured(), true);
+});
+
 test("paiement à la livraison crée la commande, réserve le stock et notifie", async () => {
   const calls: string[] = [];
   const order = { id: "order-cash" };
@@ -62,7 +72,7 @@ test("paiement à la livraison crée la commande, réserve le stock et notifie",
   assert.deepEqual(calls, ["create", "stock", "notify"]);
 });
 
-test("Mobile Money crée une facture PayDunya puis utilise son URL sécurisée", async () => {
+test("Mobile Money propose les canaux béninois documentés et conserve le total XOF", async () => {
   let channels: unknown;
   let currency: unknown;
   let totalAmount: unknown;
@@ -74,9 +84,9 @@ test("Mobile Money crée une facture PayDunya puis utilise son URL sécurisée",
     actions = body.actions;
   }));
 
-  assert.deepEqual(channels, ["mtn-benin", "moov-benin"]);
+  assert.deepEqual(channels, ["mtn-benin", "moov-benin", "celtiis-cash"]);
   assert.equal(currency, "XOF");
-  assert.equal(totalAmount, 5000);
+  assert.equal(totalAmount, 5100);
   assert.deepEqual(actions, {
     cancel_url: "https://kingofcaps.bj/api/payments/paydunya/cancel",
     return_url: "https://kingofcaps.bj/api/payments/paydunya/return",
@@ -97,14 +107,118 @@ test("l’URL de paiement retournée par PayDunya est conservée sans reconstruc
   assert.equal(checkout.url, returnedUrl);
 });
 
-test("la carte bancaire utilise la même page sécurisée PayDunya", async () => {
+test("la carte bancaire utilise uniquement le canal card et conserve le total", async () => {
   let channels: unknown;
+  let totalAmount: unknown;
   const checkout = await createPayDunyaCheckout(checkoutOrder, "card", payDunyaFetcher((body) => {
-    channels = (body.invoice as { channels?: unknown }).channels;
+    const invoice = body.invoice as { channels?: unknown; total_amount?: unknown };
+    channels = invoice.channels;
+    totalAmount = invoice.total_amount;
   }));
 
   assert.deepEqual(channels, ["card"]);
+  assert.equal(totalAmount, 5100);
   assert.match(checkout.url, /^https:\/\/app\.paydunya\.com\//);
+});
+
+test("une erreur HTTP PayDunya est journalisée sans secret ni données client", async () => {
+  const logged: unknown[][] = [];
+  const originalConsoleError = console.error;
+  console.error = (...args: unknown[]) => { logged.push(args); };
+
+  try {
+    await assert.rejects(
+      createPayDunyaCheckout(checkoutOrder, "mobile_money", async () => Response.json({
+        response_code: "54",
+        description: "Échec pour Awa Mensah, awa@example.com, 97000000, 12 Rue des Casquettes, Cotonou, Livrer après 18h, KOC-0001, carte 4111 1111 1111 1111, master-key application-token",
+      }, { status: 422 })),
+      /PayDunya a refusé la création de la facture/,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const logText = JSON.stringify(logged);
+  assert.match(logText, /invoice_creation/);
+  assert.match(logText, /mobile_money/);
+  assert.match(logText, /422/);
+  assert.match(logText, /54/);
+  for (const sensitiveValue of ["Awa Mensah", "awa@example.com", "97000000", "12 Rue des Casquettes", "Cotonou", "Livrer après 18h", "KOC-0001", "4111 1111 1111 1111", "master-key", "application-token"]) {
+    assert.equal(logText.includes(sensitiveValue), false);
+  }
+});
+
+test("une réponse non JSON de PayDunya est distinguée par son statut HTTP", async () => {
+  const logged: unknown[][] = [];
+  const originalConsoleError = console.error;
+  console.error = (...args: unknown[]) => { logged.push(args); };
+
+  try {
+    await assert.rejects(
+      createPayDunyaCheckout(checkoutOrder, "card", async () => new Response("réponse invalide", { status: 502 })),
+      /réponse illisible/,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const logText = JSON.stringify(logged);
+  assert.match(logText, /invoice_creation/);
+  assert.match(logText, /card/);
+  assert.match(logText, /502/);
+  assert.match(logText, /responseCode\\?":null/);
+  assert.equal(logText.includes("réponse invalide"), false);
+});
+
+test("une erreur réseau de création est expurgée et marquée sans statut HTTP", async () => {
+  const logged: unknown[][] = [];
+  const originalConsoleError = console.error;
+  console.error = (...args: unknown[]) => { logged.push(args); };
+
+  try {
+    await assert.rejects(
+      createPayDunyaCheckout(checkoutOrder, "card", async () => {
+        throw new Error("Échec pour awa@example.com, téléphone 97000000, clé master-key");
+      }),
+      /Impossible de joindre PayDunya/,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const logText = JSON.stringify(logged);
+  assert.match(logText, /invoice_creation/);
+  assert.match(logText, /card/);
+  assert.match(logText, /null/);
+  for (const sensitiveValue of ["awa@example.com", "97000000", "master-key"]) {
+    assert.equal(logText.includes(sensitiveValue), false);
+  }
+});
+
+test("un échec après redirection journalise seulement le statut HTTP et le code fournisseur", async () => {
+  const logged: unknown[][] = [];
+  const originalConsoleError = console.error;
+  console.error = (...args: unknown[]) => { logged.push(args); };
+
+  try {
+    await assert.rejects(
+      verifyPayDunyaPayment("invoice-secret-token", async () => Response.json({
+        response_code: "58",
+        response_text: "Échec KOC-0001 pour awa@example.com, 97000000, token invoice-secret-token",
+      }, { status: 402 })),
+      /n’a pas pu être vérifiée/,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const logText = JSON.stringify(logged);
+  assert.match(logText, /payment_confirmation/);
+  assert.match(logText, /402/);
+  assert.match(logText, /58/);
+  for (const sensitiveValue of ["invoice-secret-token", "KOC-0001", "awa@example.com", "97000000"]) {
+    assert.equal(logText.includes(sensitiveValue), false);
+  }
 });
 
 test("la confirmation PayDunya vérifie le token, le montant et la devise XOF", async () => {

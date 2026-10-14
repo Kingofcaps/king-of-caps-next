@@ -6,7 +6,7 @@ import {
   getOrder,
   getOrderByPayDunyaToken,
 } from "@/app/lib/orders";
-import { verifyPayDunyaPayment } from "@/app/lib/paydunya";
+import { safePayDunyaErrorName, verifyPayDunyaPayment } from "@/app/lib/paydunya";
 import { processPayDunyaPayment } from "@/app/lib/payment-workflows";
 
 export async function processPayDunyaOrder(token: string) {
@@ -32,10 +32,18 @@ export async function processPayDunyaOrder(token: string) {
         sendCustomerOrderConfirmation(orderWithItems),
       ]);
       if (results[0].status === "rejected") {
-        console.error(`Échec de la notification administrateur pour la commande ${order.order_number}.`, results[0].reason);
+        console.error("Échec de notification administrateur après paiement", {
+          phase: "post_payment_notification",
+          recipient: "admin",
+          errorType: safePayDunyaErrorName(results[0].reason),
+        });
       }
       if (results[1].status === "rejected") {
-        console.error(`Échec de la confirmation client pour la commande ${order.order_number}.`, results[1].reason);
+        console.error("Échec de confirmation client après paiement", {
+          phase: "post_payment_notification",
+          recipient: "customer",
+          errorType: safePayDunyaErrorName(results[1].reason),
+        });
       }
     },
   });

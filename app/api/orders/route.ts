@@ -3,6 +3,7 @@ import {
   createPayDunyaCheckout,
   isPayDunyaConfigured,
   ONLINE_PAYMENT_UNAVAILABLE_MESSAGE,
+  safePayDunyaErrorName,
 } from "@/app/lib/paydunya";
 import { notifyNewOrder, sendCustomerOrderConfirmation } from "@/app/lib/order-notifications";
 import { isOnlinePaymentMethod, startOrderPayment } from "@/app/lib/payment-workflows";
@@ -200,10 +201,18 @@ export async function POST(request: Request) {
             sendCustomerOrderConfirmation(order),
           ]);
           if (emailResults[0].status === "rejected") {
-            console.error(`Échec de la notification administrateur pour la commande ${order.order_number}.`, emailResults[0].reason);
+            console.error("Échec de notification de commande", {
+              phase: "order_notification",
+              recipient: "admin",
+              errorType: safePayDunyaErrorName(emailResults[0].reason),
+            });
           }
           if (emailResults[1].status === "rejected") {
-            console.error(`Échec de la confirmation client pour la commande ${order.order_number}.`, emailResults[1].reason);
+            console.error("Échec de confirmation de commande", {
+              phase: "order_notification",
+              recipient: "customer",
+              errorType: safePayDunyaErrorName(emailResults[1].reason),
+            });
           }
         },
         createOnlineInvoice: (paymentMethod) => createPayDunyaCheckout({ ...orderDetails, total_amount: payDunyaTotalAmount, items: payDunyaInvoiceItems }, paymentMethod),
@@ -225,9 +234,12 @@ export async function POST(request: Request) {
       throw error;
     }
   } catch (error) {
-    console.error("Erreur de création de commande :", error);
+    console.error("Échec de création de commande ou de facture", {
+      phase: "order_or_invoice_creation",
+      errorType: safePayDunyaErrorName(error),
+    });
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Impossible de créer la commande." },
+      { success: false, error: "Impossible de finaliser la commande ou de créer la facture." },
       { status: 500 },
     );
   }

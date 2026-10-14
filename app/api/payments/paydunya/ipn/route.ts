@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { processPayDunyaOrder } from "@/app/lib/paydunya-order-processing";
-import { verifyPayDunyaHash } from "@/app/lib/paydunya";
+import { safePayDunyaErrorName, verifyPayDunyaHash } from "@/app/lib/paydunya";
 
 export const runtime = "nodejs";
 
@@ -45,7 +45,11 @@ export async function POST(request: Request) {
     const result = await processPayDunyaOrder(token);
     return NextResponse.json({ received: true, status: result.status });
   } catch (error) {
-    console.error("Erreur de traitement de l’IPN PayDunya :", error);
+    console.error("Échec du traitement IPN PayDunya", {
+      phase: "payment_callback",
+      handler: "ipn_legacy",
+      errorType: safePayDunyaErrorName(error),
+    });
     return NextResponse.json({ error: "Notification PayDunya non traitée." }, { status: 500 });
   }
 }

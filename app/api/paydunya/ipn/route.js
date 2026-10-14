@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { safePayDunyaErrorName } from "@/app/lib/paydunya";
 import { processPayDunyaOrder } from "@/app/lib/paydunya-order-processing";
 
 export const runtime = "nodejs";
@@ -120,7 +121,11 @@ export async function POST(request) {
       { status: 200 },
     );
   } catch (error) {
-    console.error("Erreur de traitement de l’IPN PayDunya :", error);
+    console.error("Échec du traitement IPN PayDunya", {
+      phase: "payment_callback",
+      handler: "ipn",
+      errorType: safePayDunyaErrorName(error),
+    });
     return Response.json(
       { error: "Notification PayDunya non traitée." },
       { status: 500 },

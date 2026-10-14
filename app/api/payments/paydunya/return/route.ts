@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getOrderByPayDunyaToken } from "@/app/lib/orders";
+import { safePayDunyaErrorName } from "@/app/lib/paydunya";
 import { processPayDunyaOrder } from "@/app/lib/paydunya-order-processing";
 
 export const runtime = "nodejs";
@@ -25,7 +26,11 @@ export async function GET(request: Request) {
     if (order) return NextResponse.redirect(new URL(`/commande-confirmee/${encodeURIComponent(order.order_number)}`, request.url));
     return NextResponse.redirect(resultUrl(request, result.status));
   } catch (error) {
-    console.error("Erreur de retour PayDunya :", error);
+    console.error("Échec du traitement PayDunya après redirection", {
+      phase: "after_redirect",
+      handler: "return",
+      errorType: safePayDunyaErrorName(error),
+    });
     return NextResponse.redirect(resultUrl(request, "error"));
   }
 }
