@@ -1,3 +1,5 @@
+import { supabaseServerAuthHeaders } from "./supabase-server";
+
 import "server-only";
 
 export type PwaPlatform = "ios" | "android" | "desktop";
@@ -32,8 +34,7 @@ async function pwaInstallationsRequest(path: string, init: RequestInit = {}) {
   const response = await fetch(`${url}/rest/v1/${path}`, {
     ...init,
     headers: {
-      apikey: serviceRoleKey,
-      Authorization: `Bearer ${serviceRoleKey}`,
+      ...supabaseServerAuthHeaders(serviceRoleKey),
       "Content-Type": "application/json",
       ...(init.headers ?? {}),
     },

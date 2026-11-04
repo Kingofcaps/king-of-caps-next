@@ -1,3 +1,5 @@
+import { supabaseServerAuthHeaders } from "./supabase-server";
+
 import { formatFcfaPrice } from "@/app/lib/prices";
 import { calculateProductCurrencyPrices } from "@/app/lib/currency";
 import { normalizeProductImageUrl, PRODUCT_IMAGE_FALLBACK } from "@/app/lib/product-image-url";
@@ -95,8 +97,7 @@ async function supabaseProductsRequest(path: string, init: RequestInit = {}) {
   const response = await fetch(`${url}/rest/v1/${path}`, {
     ...init,
     headers: {
-      apikey: serviceRoleKey,
-      Authorization: `Bearer ${serviceRoleKey}`,
+      ...supabaseServerAuthHeaders(serviceRoleKey),
       "Content-Type": "application/json",
       ...(init.headers ?? {}),
     },

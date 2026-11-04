@@ -1,7 +1,7 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { createClient } from "@supabase/supabase-js";
+import { createSupabaseServerClient } from "./supabase-server";
 
 export const PRODUCT_IMAGES_BUCKET = "product-images";
 export const MAX_PRODUCT_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -34,9 +34,7 @@ function getStorageClient() {
     throw new Error("NEXT_PUBLIC_SUPABASE_URL n’est pas une URL HTTP(S) valide.");
   }
 
-  return createClient(url, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  return createSupabaseServerClient(url, serviceRoleKey);
 }
 
 function validateProductImage(file: File) {

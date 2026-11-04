@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { createClient, type PostgrestError } from "@supabase/supabase-js";
+import type { PostgrestError } from "@supabase/supabase-js";
 import { ADMIN_COOKIE, isAdminToken } from "@/app/lib/admin-auth";
 import { deleteProductImages, getProductImageStoragePath } from "@/app/lib/product-images";
+import { createSupabaseServerClient } from "@/app/lib/supabase-server";
 
 export const runtime = "nodejs";
 
@@ -21,9 +22,7 @@ function getSupabaseClient() {
     throw new Error("Supabase n’est pas configuré côté serveur.");
   }
 
-  return createClient(url, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  return createSupabaseServerClient(url, serviceRoleKey);
 }
 
 function productImageUrls(product: ProductImagesRecord) {

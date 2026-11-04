@@ -1,3 +1,5 @@
+import { supabaseServerAuthHeaders } from "./supabase-server";
+
 import { productRecordToProduct, type Product, type ProductRecord } from "@/app/lib/products";
 import type { ShopPaymentMethod, ShopSaleDraft } from "@/app/lib/shop-sale-workflow";
 
@@ -41,8 +43,7 @@ async function shopSalesRequest(path: string, init: RequestInit = {}) {
   const response = await fetch(`${url}/rest/v1/${path}`, {
     ...init,
     headers: {
-      apikey: serviceRoleKey,
-      Authorization: `Bearer ${serviceRoleKey}`,
+      ...supabaseServerAuthHeaders(serviceRoleKey),
       "Content-Type": "application/json",
       ...(init.headers ?? {}),
     },

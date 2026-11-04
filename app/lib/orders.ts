@@ -1,3 +1,5 @@
+import { supabaseServerAuthHeaders } from "./supabase-server";
+
 export type PaymentMethod = "cash_on_delivery" | "mobile_money" | "card";
 export type PaymentStatus = "pending" | "paid" | "failed";
 export type OrderStatus = "new" | "pending" | "awaiting_payment" | "confirmed" | "preparing" | "delivered" | "cancelled";
@@ -52,7 +54,7 @@ type NewOrderItem = Omit<OrderItem, "id" | "order_id" | "created_at">;
 
 function getSupabaseConfig() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 
   if (!url || !serviceRoleKey) {
     throw new Error("Supabase n’est pas configuré. Ajoutez SUPABASE_SERVICE_ROLE_KEY côté serveur.");
@@ -66,8 +68,7 @@ async function supabaseRequest(path: string, init: RequestInit = {}) {
   const response = await fetch(`${url}/rest/v1/${path}`, {
     ...init,
     headers: {
-      apikey: serviceRoleKey,
-      Authorization: `Bearer ${serviceRoleKey}`,
+      ...supabaseServerAuthHeaders(serviceRoleKey),
       "Content-Type": "application/json",
       ...(init.headers ?? {}),
     },
@@ -90,14 +91,14 @@ async function supabaseRequest(path: string, init: RequestInit = {}) {
     }
 
     console.error("Supabase a refusé une requête orders :", {
+      operation: `${init.method ?? "GET"} ${path.split("?")[0]}`,
       status: response.status,
-      code: errorDetails.code ?? null,
-      message: errorDetails.message ?? null,
-      details: errorDetails.details ?? null,
-      hint: errorDetails.hint ?? null,
+      code: typeof errorDetails.code === "string" && /^[A-Z0-9_-]{1,32}$/i.test(errorDetails.code)
+        ? errorDetails.code
+        : null,
     });
 
-    throw new Error(`Supabase a refusé la requête (${response.status}).`);
+    throw new Error(`Supabase a refusé la requête (${response.status}${errorDetails.code ? `, ${errorDetails.code}` : ""}).`);
   }
 
   return response;

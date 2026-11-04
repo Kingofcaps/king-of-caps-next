@@ -1,3 +1,5 @@
+import { supabaseServerAuthHeaders } from "./supabase-server";
+
 import "server-only";
 
 const MAX_ENDPOINT_LENGTH = 4096;
@@ -85,8 +87,7 @@ async function pushSubscriptionsRequest(path: string, init: RequestInit) {
   const response = await fetch(`${url}/rest/v1/${path}`, {
     ...init,
     headers: {
-      apikey: serviceRoleKey,
-      Authorization: `Bearer ${serviceRoleKey}`,
+      ...supabaseServerAuthHeaders(serviceRoleKey),
       "Content-Type": "application/json",
       ...(init.headers ?? {}),
     },
