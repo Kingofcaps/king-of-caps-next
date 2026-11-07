@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, test } from "node:test";
-import { createPayDunyaCheckout, isPayDunyaConfigured, verifyPayDunyaPayment } from "../app/lib/paydunya.ts";
+import { createPayDunyaCheckout, isPayDunyaConfigured, PayDunyaInvoiceError, verifyPayDunyaPayment } from "../app/lib/paydunya.ts";
 import { processPayDunyaPayment, startOrderPayment } from "../app/lib/payment-workflows.ts";
 
 const originalEnvironment = { ...process.env };
@@ -122,77 +122,37 @@ test("la carte bancaire utilise uniquement le canal card et conserve le total", 
 });
 
 test("une erreur HTTP PayDunya est journalisée sans secret ni données client", async () => {
-  const logged: unknown[][] = [];
-  const originalConsoleError = console.error;
-  console.error = (...args: unknown[]) => { logged.push(args); };
+  const error = await createPayDunyaCheckout(checkoutOrder, "mobile_money", async () => Response.json({
+    response_code: "54",
+    description: "Échec pour Awa Mensah, awa@example.com, 97000000, 12 Rue des Casquettes, Cotonou, Livrer après 18h, KOC-0001, carte 4111 1111 1111 1111, master-key application-token",
+  }, { status: 422 })).catch((reason: unknown) => reason);
 
-  try {
-    await assert.rejects(
-      createPayDunyaCheckout(checkoutOrder, "mobile_money", async () => Response.json({
-        response_code: "54",
-        description: "Échec pour Awa Mensah, awa@example.com, 97000000, 12 Rue des Casquettes, Cotonou, Livrer après 18h, KOC-0001, carte 4111 1111 1111 1111, master-key application-token",
-      }, { status: 422 })),
-      /PayDunya a refusé la création de la facture/,
-    );
-  } finally {
-    console.error = originalConsoleError;
-  }
-
-  const logText = JSON.stringify(logged);
-  assert.match(logText, /invoice_creation/);
-  assert.match(logText, /mobile_money/);
-  assert.match(logText, /422/);
-  assert.match(logText, /54/);
-  for (const sensitiveValue of ["Awa Mensah", "awa@example.com", "97000000", "12 Rue des Casquettes", "Cotonou", "Livrer après 18h", "KOC-0001", "4111 1111 1111 1111", "master-key", "application-token"]) {
-    assert.equal(logText.includes(sensitiveValue), false);
-  }
+  assert.ok(error instanceof PayDunyaInvoiceError);
+  assert.equal(error.httpStatus, 422);
+  assert.equal(error.responseCode, "54");
+  assert.equal(error.message, "PayDunya rejected invoice creation.");
 });
 
 test("une réponse non JSON de PayDunya est distinguée par son statut HTTP", async () => {
-  const logged: unknown[][] = [];
-  const originalConsoleError = console.error;
-  console.error = (...args: unknown[]) => { logged.push(args); };
+  const error = await createPayDunyaCheckout(checkoutOrder, "card", async () => new Response("donnée confidentielle", { status: 502 }))
+    .catch((reason: unknown) => reason);
 
-  try {
-    await assert.rejects(
-      createPayDunyaCheckout(checkoutOrder, "card", async () => new Response("réponse invalide", { status: 502 })),
-      /réponse illisible/,
-    );
-  } finally {
-    console.error = originalConsoleError;
-  }
-
-  const logText = JSON.stringify(logged);
-  assert.match(logText, /invoice_creation/);
-  assert.match(logText, /card/);
-  assert.match(logText, /502/);
-  assert.match(logText, /responseCode\\?":null/);
-  assert.equal(logText.includes("réponse invalide"), false);
+  assert.ok(error instanceof PayDunyaInvoiceError);
+  assert.equal(error.category, "invalid_response");
+  assert.equal(error.httpStatus, 502);
+  assert.equal(error.message.includes("donnée confidentielle"), false);
 });
 
 test("une erreur réseau de création est expurgée et marquée sans statut HTTP", async () => {
-  const logged: unknown[][] = [];
-  const originalConsoleError = console.error;
-  console.error = (...args: unknown[]) => { logged.push(args); };
+  const error = await createPayDunyaCheckout(checkoutOrder, "card", async () => {
+    throw new Error("Échec pour awa@example.com, téléphone 97000000, clé master-key");
+  }).catch((reason: unknown) => reason);
 
-  try {
-    await assert.rejects(
-      createPayDunyaCheckout(checkoutOrder, "card", async () => {
-        throw new Error("Échec pour awa@example.com, téléphone 97000000, clé master-key");
-      }),
-      /Impossible de joindre PayDunya/,
-    );
-  } finally {
-    console.error = originalConsoleError;
-  }
-
-  const logText = JSON.stringify(logged);
-  assert.match(logText, /invoice_creation/);
-  assert.match(logText, /card/);
-  assert.match(logText, /null/);
-  for (const sensitiveValue of ["awa@example.com", "97000000", "master-key"]) {
-    assert.equal(logText.includes(sensitiveValue), false);
-  }
+  assert.ok(error instanceof PayDunyaInvoiceError);
+  assert.equal(error.category, "network");
+  assert.equal(error.httpStatus, null);
+  assert.equal(error.responseCode, null);
+  assert.equal(error.message.includes("awa@example.com"), false);
 });
 
 test("un échec après redirection journalise seulement le statut HTTP et le code fournisseur", async () => {

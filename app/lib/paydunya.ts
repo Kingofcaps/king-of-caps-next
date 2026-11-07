@@ -33,6 +33,27 @@ type PayDunyaCreateResponse = {
   };
 };
 
+export type PayDunyaInvoiceFailureCategory = "network" | "invalid_response" | "rejected";
+
+export class PayDunyaInvoiceError extends Error {
+  readonly httpStatus: number | null;
+  readonly responseCode: string | null;
+  readonly category: PayDunyaInvoiceFailureCategory;
+
+  constructor(category: PayDunyaInvoiceFailureCategory, httpStatus: number | null, responseCode: string | null) {
+    const message = category === "network"
+      ? "PayDunya could not be reached."
+      : category === "rejected"
+        ? "PayDunya rejected invoice creation."
+        : "PayDunya returned an invalid invoice response.";
+    super(message);
+    this.name = "PayDunyaInvoiceError";
+    this.httpStatus = httpStatus;
+    this.responseCode = responseCode;
+    this.category = category;
+  }
+}
+
 export type PayDunyaPaymentStatus = "pending" | "completed" | "cancelled" | "failed";
 
 export type PayDunyaConfirmation = {
@@ -102,79 +123,8 @@ function payDunyaCheckoutUrlFromResponse(value: string) {
   }
 }
 
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function safePayDunyaMessage(
-  value: unknown,
-  config: ReturnType<typeof getConfig>,
-  order?: CheckoutOrder,
-  additionalSensitiveValues: string[] = [],
-) {
-  if (typeof value !== "string" || !value.trim()) return "Aucun message exploitable retourné par PayDunya.";
-
-  let message = value.slice(0, 1_000);
-  for (const sensitiveValue of [
-    config.masterKey,
-    config.privateKey,
-    config.token,
-    ...(order ? [
-      `${order.customer_first_name} ${order.customer_last_name}`.trim(),
-      order.order_number,
-      order.customer_first_name,
-      order.customer_last_name,
-      order.customer_email ?? "",
-      order.customer_phone,
-      order.customer_address ?? "",
-      order.customer_city ?? "",
-      order.customer_note ?? "",
-    ] : []),
-    ...additionalSensitiveValues,
-  ]) {
-    if (sensitiveValue.length > 1) {
-      message = message.replace(new RegExp(escapeRegExp(sensitiveValue), "gi"), "[EXPURGÉ]");
-    }
-  }
-
-  return message
-    .replace(/https?:\/\/[^\s"'<>]+/gi, "[URL EXPURGÉE]")
-    .replace(/[\w.+-]+@[\w.-]+\.[A-Z]{2,}/gi, "[EMAIL EXPURGÉ] ")
-    .replace(/\b(token|authorization|api[-_ ]?key|secret|card|pan)\s*[:=]\s*[^\s,;]+/gi, "$1=[EXPURGÉ]")
-    .replace(/(?:\+?\d[\d\s().-]{5,}\d)/g, "[NUMÉRO EXPURGÉ]")
-    .replace(/\b(?:\d[ -]*?){13,19}\b/g, "[NUMÉRO EXPURGÉ]")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 240);
-}
-
-function safeResponseCode(value: unknown) {
+export function safePayDunyaResponseCode(value: unknown) {
   return typeof value === "string" && /^[a-z\d_-]{1,32}$/i.test(value) ? value : null;
-}
-
-function payDunyaResponseMessage(payload: PayDunyaCreateResponse) {
-  return payload.errors?.description
-    ?? payload.errors?.message
-    ?? payload.description
-    ?? payload.response_text
-    ?? "Aucun message exploitable retourné par PayDunya.";
-}
-
-function logPayDunyaCreateError(
-  paymentMethod: Extract<PaymentMethod, "mobile_money" | "card">,
-  httpStatus: number | null,
-  responseCode: string | null,
-  message: unknown,
-  config: ReturnType<typeof getConfig>,
-  order: CheckoutOrder,
-) {
-  console.error("Échec de création de facture PayDunya", {
-    phase: "invoice_creation",
-    paymentMethod,
-    httpStatus,
-    responseCode,
-    errorMessage: safePayDunyaMessage(message, config, order),
-  });
 }
 
 export function safePayDunyaErrorName(error: unknown) {
@@ -248,16 +198,8 @@ export async function createPayDunyaCheckout(
       }),
       cache: "no-store",
     });
-  } catch (error) {
-    logPayDunyaCreateError(
-      paymentMethod,
-      null,
-      null,
-      error instanceof Error ? error.message : "Échec de connexion à PayDunya.",
-      config,
-      order,
-    );
-    throw new Error("Impossible de joindre PayDunya pour créer la facture.");
+  } catch {
+    throw new PayDunyaInvoiceError("network", null, null);
   }
 
   const rawBody = await response.text();
@@ -265,43 +207,28 @@ export async function createPayDunyaCheckout(
   try {
     payload = JSON.parse(rawBody) as PayDunyaCreateResponse;
   } catch {
-    logPayDunyaCreateError(paymentMethod, response.status, null, "Réponse non JSON.", config, order);
-    throw new Error("PayDunya a retourné une réponse illisible.");
+    throw new PayDunyaInvoiceError("invalid_response", response.status, null);
   }
 
-  const responseCode = safeResponseCode(payload.response_code);
+  const responseCode = safePayDunyaResponseCode(payload.response_code);
   if (!response.ok || payload.response_code !== "00") {
-    const errorMessage = payDunyaResponseMessage(payload);
-    logPayDunyaCreateError(paymentMethod, response.status, responseCode, errorMessage, config, order);
-    throw new Error("PayDunya a refusé la création de la facture.");
+    throw new PayDunyaInvoiceError("rejected", response.status, responseCode);
   }
 
   const responseUrl = payload.response_text?.trim() ?? "";
   const responseToken = payload.token?.trim() ?? "";
   const checkoutUrl = payDunyaCheckoutUrlFromResponse(responseUrl);
 
-  console.info("Facture PayDunya créée", {
-    phase: "invoice_creation",
-    paymentMethod,
-    httpStatus: response.status,
-    responseCode,
-    tokenPresent: Boolean(responseToken),
-    checkoutUrlHost: checkoutUrl ? new URL(checkoutUrl).hostname : null,
-  });
-
   if (!responseToken || !checkoutUrl) {
-    logPayDunyaCreateError(
-      paymentMethod,
-      response.status,
-      responseCode,
-      "Token ou URL de facture manquant.",
-      config,
-      order,
-    );
-    throw new Error("PayDunya n’a pas retourné une facture de paiement valide.");
+    throw new PayDunyaInvoiceError("invalid_response", response.status, responseCode);
   }
 
-  return { token: responseToken, url: checkoutUrl };
+  return {
+    token: responseToken,
+    url: checkoutUrl,
+    httpStatus: response.status,
+    responseCode: safePayDunyaResponseCode(payload.response_code),
+  };
 }
 
 export async function verifyPayDunyaPayment(
@@ -343,7 +270,7 @@ export async function verifyPayDunyaPayment(
     throw new Error("La réponse de vérification PayDunya est illisible.");
   }
 
-  const responseCode = safeResponseCode(payload.response_code);
+  const responseCode = safePayDunyaResponseCode(payload.response_code);
   if (
     !response.ok
     || payload.response_code !== "00"

@@ -1,4 +1,9 @@
-import { supabaseServerAuthHeaders } from "./supabase-server";
+import {
+  requireSupabaseServerKey,
+  SupabaseServerError,
+  supabaseServerAuthHeaders,
+  supabaseServerErrorFromResponse,
+} from "./supabase-server";
 
 export type PaymentMethod = "cash_on_delivery" | "mobile_money" | "card";
 export type PaymentStatus = "pending" | "paid" | "failed";
@@ -53,52 +58,32 @@ type NewOrder = Omit<Order, "id" | "created_at" | "order_items">;
 type NewOrderItem = Omit<OrderItem, "id" | "order_id" | "created_at">;
 
 function getSupabaseConfig() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-
-  if (!url || !serviceRoleKey) {
-    throw new Error("Supabase n’est pas configuré. Ajoutez SUPABASE_SERVICE_ROLE_KEY côté serveur.");
-  }
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  if (!url) throw new SupabaseServerError(null, "SUPABASE_CONFIGURATION_MISSING");
+  const serviceRoleKey = requireSupabaseServerKey(process.env.SUPABASE_SERVICE_ROLE_KEY);
 
   return { url, serviceRoleKey };
 }
 
 async function supabaseRequest(path: string, init: RequestInit = {}) {
   const { url, serviceRoleKey } = getSupabaseConfig();
-  const response = await fetch(`${url}/rest/v1/${path}`, {
-    ...init,
-    headers: {
-      ...supabaseServerAuthHeaders(serviceRoleKey),
-      "Content-Type": "application/json",
-      ...(init.headers ?? {}),
-    },
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${url}/rest/v1/${path}`, {
+      ...init,
+      headers: {
+        ...supabaseServerAuthHeaders(serviceRoleKey),
+        "Content-Type": "application/json",
+        ...(init.headers ?? {}),
+      },
+      cache: "no-store",
+    });
+  } catch {
+    throw new SupabaseServerError(null, null);
+  }
 
   if (!response.ok) {
-    const rawError = await response.text();
-    let errorDetails: {
-      code?: string;
-      message?: string;
-      details?: string | null;
-      hint?: string | null;
-    } = {};
-
-    try {
-      errorDetails = JSON.parse(rawError) as typeof errorDetails;
-    } catch {
-      errorDetails = { message: rawError };
-    }
-
-    console.error("Supabase a refusé une requête orders :", {
-      operation: `${init.method ?? "GET"} ${path.split("?")[0]}`,
-      status: response.status,
-      code: typeof errorDetails.code === "string" && /^[A-Z0-9_-]{1,32}$/i.test(errorDetails.code)
-        ? errorDetails.code
-        : null,
-    });
-
-    throw new Error(`Supabase a refusé la requête (${response.status}${errorDetails.code ? `, ${errorDetails.code}` : ""}).`);
+    throw await supabaseServerErrorFromResponse(response);
   }
 
   return response;
@@ -133,7 +118,7 @@ export async function createOrderWithItems(order: NewOrder, items: NewOrderItem[
     method: "POST",
     body: JSON.stringify({ p_order: order, p_items: items }),
   });
-  return (await response.json()) as { created: boolean; order: Order };
+  return { ...(await response.json()) as { created: boolean; order: Order }, httpStatus: response.status };
 }
 
 export async function listOrders() {
@@ -209,6 +194,7 @@ export async function updateOrderByNumber(orderNumber: string, updates: Partial<
 type PaymentTransition = {
   processed: boolean;
   order: Order;
+  httpStatus?: number;
 };
 
 export async function approvePayDunyaOrder(token: string) {
@@ -245,7 +231,7 @@ export async function reserveOrderStock(id: string) {
     method: "POST",
     body: JSON.stringify({ p_order_id: id }),
   });
-  return (await response.json()) as PaymentTransition;
+  return { ...(await response.json()) as PaymentTransition, httpStatus: response.status };
 }
 
 export async function releaseOrderStock(id: string) {

@@ -3,7 +3,6 @@ import {
   createPayDunyaCheckout,
   isPayDunyaConfigured,
   ONLINE_PAYMENT_UNAVAILABLE_MESSAGE,
-  safePayDunyaErrorName,
 } from "@/app/lib/paydunya";
 import { notifyNewOrder, sendCustomerOrderConfirmation } from "@/app/lib/order-notifications";
 import { isOnlinePaymentMethod, startOrderPayment } from "@/app/lib/payment-workflows";
@@ -21,6 +20,13 @@ import { getProductPrice, isCurrency, type Currency } from "@/app/lib/currency";
 import { getRequestCurrency } from "@/app/lib/currency-server";
 import { InsufficientStockError, getProduct } from "@/app/lib/products";
 import { isValidEmail } from "@/app/lib/validation";
+import {
+  CHECKOUT_PUBLIC_ERROR_MESSAGE,
+  logCheckoutDiagnostic,
+  newCheckoutCorrelationId,
+  runCheckoutDiagnosticStage,
+  safeCheckoutErrorDetails,
+} from "@/app/lib/checkout-diagnostics";
 
 export const runtime = "nodejs";
 
@@ -66,8 +72,43 @@ function requestedItems(body: OrderRequest) {
 }
 
 export async function POST(request: Request) {
+  const correlationId = newCheckoutCorrelationId();
+  let paymentMethod: PaymentMethod | "unknown" = "unknown";
+  let body: OrderRequest;
+
   try {
-    const body = (await request.json()) as OrderRequest;
+    body = (await request.json()) as OrderRequest;
+    if (!body || typeof body !== "object") throw new Error("invalid_json");
+  } catch {
+    logCheckoutDiagnostic({ correlationId, event: "order_received", paymentMethod });
+    logCheckoutDiagnostic({
+      correlationId,
+      event: "order_validation_failed",
+      paymentMethod,
+      httpStatus: 400,
+      errorCode: "INVALID_JSON",
+      errorMessage: "The request body is invalid.",
+    });
+    return NextResponse.json({ success: false, error: "Veuillez compléter tous les champs obligatoires." }, { status: 400 });
+  }
+
+  paymentMethod = validPaymentMethod(body.paymentMethod) ? body.paymentMethod : "unknown";
+  const diagnosticContext = { correlationId, paymentMethod };
+  logCheckoutDiagnostic({ correlationId, event: "order_received", paymentMethod });
+
+  const validationFailure = (errorCode: string, errorMessage: string, clientMessage: string, status = 400) => {
+    logCheckoutDiagnostic({
+      correlationId,
+      event: "order_validation_failed",
+      paymentMethod,
+      httpStatus: status,
+      errorCode,
+      errorMessage,
+    });
+    return NextResponse.json({ success: false, error: clientMessage }, { status });
+  };
+
+  try {
     const items = requestedItems(body);
     const checkoutId = text(body.checkoutId);
     const firstName = text(body.firstName);
@@ -79,14 +120,29 @@ export async function POST(request: Request) {
     const currency: Currency = isCurrency(body.currency) ? body.currency.toUpperCase() as Currency : await getRequestCurrency();
 
     if (!items || !checkoutId || checkoutId.length > 100 || !firstName || !lastName || !phone || !email || !address || !city || !validPaymentMethod(body.paymentMethod)) {
-      return NextResponse.json({ success: false, error: "Veuillez compléter tous les champs obligatoires." }, { status: 400 });
+      return validationFailure("INVALID_ORDER_FIELDS", "Required order fields are missing or invalid.", "Veuillez compléter tous les champs obligatoires.");
     }
     if (!isValidEmail(email)) {
-      return NextResponse.json({ success: false, error: "Veuillez saisir une adresse e-mail valide." }, { status: 400 });
+      return validationFailure("INVALID_EMAIL", "The email address is invalid.", "Veuillez saisir une adresse e-mail valide.");
     }
+
+    logCheckoutDiagnostic({
+      correlationId,
+      event: "order_validation",
+      paymentMethod,
+      httpStatus: 200,
+    });
 
     const isOnlinePayment = isOnlinePaymentMethod(body.paymentMethod);
     if (isOnlinePayment && !isPayDunyaConfigured()) {
+      logCheckoutDiagnostic({
+        correlationId,
+        event: "paydunya_configuration_failed",
+        paymentMethod,
+        httpStatus: 503,
+        errorCode: "PAYDUNYA_CONFIGURATION_MISSING",
+        errorMessage: "Required server-side PayDunya configuration is unavailable.",
+      });
       return NextResponse.json(
         { success: false, error: ONLINE_PAYMENT_UNAVAILABLE_MESSAGE },
         { status: 503 },
@@ -94,7 +150,11 @@ export async function POST(request: Request) {
     }
 
     try {
-      const existingOrder = await getOrderByCheckoutId(checkoutId);
+      const existingOrder = await runCheckoutDiagnosticStage(diagnosticContext, {
+        started: "supabase_checkout_lookup_started",
+        succeeded: "supabase_checkout_lookup_success",
+        failed: "supabase_checkout_lookup_failed",
+      }, () => getOrderByCheckoutId(checkoutId));
       if (existingOrder) {
         if (existingOrder.payment_method === "cash_on_delivery" && existingOrder.stock_reserved_at) {
           return NextResponse.json({ success: true, orderNumber: existingOrder.order_number });
@@ -105,7 +165,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: false, error: "Cette tentative de commande a déjà été traitée." }, { status: 409 });
       }
 
-      const products = await Promise.all(items.map(async (item) => ({ ...item, product: await getProduct(item.productId) })));
+      const products = await runCheckoutDiagnosticStage(diagnosticContext, {
+        started: "supabase_product_lookup_started",
+        succeeded: "supabase_product_lookup_success",
+        failed: "supabase_product_lookup_failed",
+      }, () => Promise.all(items.map(async (item) => ({ ...item, product: await getProduct(item.productId) }))));
       const orderItems = products.map(({ product, productId, quantity }) => {
         if (!product || product.id !== productId || !product.inStock || product.stockQuantity < quantity) {
           throw new InsufficientStockError();
@@ -146,7 +210,11 @@ export async function POST(request: Request) {
       ];
       const firstItem = orderItems[0];
 
-      const orderNumber = await createOrderNumber();
+      const orderNumber = await runCheckoutDiagnosticStage(diagnosticContext, {
+        started: "supabase_order_number_started",
+        succeeded: "supabase_order_number_success",
+        failed: "supabase_order_number_failed",
+      }, createOrderNumber);
       const orderDetails = {
         order_number: orderNumber,
         product_id: firstItem.product_id,
@@ -175,19 +243,39 @@ export async function POST(request: Request) {
       } as const;
 
       async function createMultiProductOrder(orderStatus: "pending" | "awaiting_payment", token: string | null) {
-        const result = await createOrderWithItems({
+        const result = await runCheckoutDiagnosticStage(diagnosticContext, {
+          started: "supabase_order_insert_started",
+          succeeded: "supabase_order_insert_success",
+          failed: "supabase_order_insert_failed",
+        }, () => createOrderWithItems({
           ...orderDetails,
           order_status: orderStatus,
           paydunya_token: token,
-        }, orderItems);
-        return await getOrder(result.order.id) ?? result.order;
+        }, orderItems), (result) => ({ httpStatus: result.httpStatus }));
+        return await runCheckoutDiagnosticStage(diagnosticContext, {
+          started: "supabase_order_readback_started",
+          succeeded: "supabase_order_readback_success",
+          failed: "supabase_order_readback_failed",
+        }, async () => await getOrder(result.order.id) ?? result.order);
       }
 
       async function reserveOrCancel(order: Awaited<ReturnType<typeof createMultiProductOrder>>) {
         try {
-          await reserveOrderStock(order.id);
+          await runCheckoutDiagnosticStage(diagnosticContext, {
+            started: "stock_reservation_started",
+            succeeded: "stock_reservation_success",
+            failed: "stock_reservation_failed",
+          }, async () => await reserveOrderStock(order.id), (result) => ({ httpStatus: result.httpStatus }));
         } catch (error) {
-          await updateOrder(order.id, { payment_status: "failed", order_status: "cancelled" });
+          try {
+            await runCheckoutDiagnosticStage(diagnosticContext, {
+              started: "stock_reservation_rollback_started",
+              succeeded: "stock_reservation_rollback_success",
+              failed: "stock_reservation_rollback_failed",
+            }, async () => { await updateOrder(order.id, { payment_status: "failed", order_status: "cancelled" }); });
+          } catch {
+            // Preserve the original reservation error; the rollback stage is logged separately.
+          }
           throw error;
         }
       }
@@ -201,23 +289,42 @@ export async function POST(request: Request) {
             sendCustomerOrderConfirmation(order),
           ]);
           if (emailResults[0].status === "rejected") {
-            console.error("Échec de notification de commande", {
-              phase: "order_notification",
+            logCheckoutDiagnostic({
+              ...diagnosticContext,
+              event: "order_notification_failed",
               recipient: "admin",
-              errorType: safePayDunyaErrorName(emailResults[0].reason),
+              ...safeCheckoutErrorDetails(emailResults[0].reason),
             });
           }
           if (emailResults[1].status === "rejected") {
-            console.error("Échec de confirmation de commande", {
-              phase: "order_notification",
+            logCheckoutDiagnostic({
+              ...diagnosticContext,
+              event: "order_notification_failed",
               recipient: "customer",
-              errorType: safePayDunyaErrorName(emailResults[1].reason),
+              ...safeCheckoutErrorDetails(emailResults[1].reason),
             });
           }
         },
-        createOnlineInvoice: (paymentMethod) => createPayDunyaCheckout({ ...orderDetails, total_amount: payDunyaTotalAmount, items: payDunyaInvoiceItems }, paymentMethod),
+        createOnlineInvoice: (selectedPaymentMethod) => runCheckoutDiagnosticStage({
+          correlationId,
+          paymentMethod: selectedPaymentMethod,
+        }, {
+          started: "paydunya_invoice_creation_started",
+          succeeded: "paydunya_invoice_creation_success",
+          failed: "paydunya_invoice_creation_failed",
+        }, () => createPayDunyaCheckout({ ...orderDetails, total_amount: payDunyaTotalAmount, items: payDunyaInvoiceItems }, selectedPaymentMethod), (invoice) => ({
+          httpStatus: invoice.httpStatus,
+          errorCode: invoice.responseCode,
+        })),
         createAwaitingPaymentOrder: (token) => createMultiProductOrder("awaiting_payment", token),
         reserveOnlineStock: reserveOrCancel,
+      });
+
+      logCheckoutDiagnostic({
+        correlationId,
+        event: "order_completed",
+        paymentMethod,
+        httpStatus: 200,
       });
 
       return result.kind === "online"
@@ -229,17 +336,28 @@ export async function POST(request: Request) {
         : NextResponse.json({ success: true, orderNumber: result.order.order_number });
     } catch (error) {
       if (error instanceof InsufficientStockError) {
+        logCheckoutDiagnostic({
+          correlationId,
+          event: "order_validation_failed",
+          paymentMethod,
+          httpStatus: 400,
+          errorCode: "INSUFFICIENT_STOCK",
+          errorMessage: "Stock is insufficient for this order.",
+        });
         return NextResponse.json({ success: false, error: error.message }, { status: 400 });
       }
       throw error;
     }
   } catch (error) {
-    console.error("Échec de création de commande ou de facture", {
-      phase: "order_or_invoice_creation",
-      errorType: safePayDunyaErrorName(error),
+    const failure = safeCheckoutErrorDetails(error);
+    logCheckoutDiagnostic({
+      correlationId,
+      event: "order_processing_failed",
+      paymentMethod,
+      ...failure,
     });
     return NextResponse.json(
-      { success: false, error: "Impossible de finaliser la commande ou de créer la facture." },
+      { success: false, error: CHECKOUT_PUBLIC_ERROR_MESSAGE },
       { status: 500 },
     );
   }

@@ -1,4 +1,8 @@
-import { supabaseServerAuthHeaders } from "./supabase-server";
+import {
+  requireSupabaseServerKey,
+  SupabaseServerError,
+  supabaseServerAuthHeaders,
+} from "./supabase-server";
 
 import { formatFcfaPrice } from "@/app/lib/prices";
 import { calculateProductCurrencyPrices } from "@/app/lib/currency";
@@ -65,14 +69,14 @@ type SupabaseErrorPayload = {
   hint?: string | null;
 };
 
-export class SupabaseProductsError extends Error {
+export class SupabaseProductsError extends SupabaseServerError {
   readonly status: number;
   readonly code: string | null;
   readonly details: string | null;
   readonly hint: string | null;
 
   constructor(status: number, payload: SupabaseErrorPayload) {
-    super(payload.message?.trim() || `Supabase a refusé la requête produits (${status}).`);
+    super(status, payload.code ?? null);
     this.name = "SupabaseProductsError";
     this.status = status;
     this.code = payload.code ?? null;
@@ -82,12 +86,9 @@ export class SupabaseProductsError extends Error {
 }
 
 function getSupabaseConfig() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !serviceRoleKey) {
-    throw new Error("Supabase n’est pas configuré. Ajoutez SUPABASE_SERVICE_ROLE_KEY côté serveur.");
-  }
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  if (!url) throw new SupabaseServerError(null, "SUPABASE_CONFIGURATION_MISSING");
+  const serviceRoleKey = requireSupabaseServerKey(process.env.SUPABASE_SERVICE_ROLE_KEY);
 
   return { url, serviceRoleKey };
 }
