@@ -39,8 +39,14 @@ export class PayDunyaInvoiceError extends Error {
   readonly httpStatus: number | null;
   readonly responseCode: string | null;
   readonly category: PayDunyaInvoiceFailureCategory;
+  readonly diagnosticMessage: string;
 
-  constructor(category: PayDunyaInvoiceFailureCategory, httpStatus: number | null, responseCode: string | null) {
+  constructor(
+    category: PayDunyaInvoiceFailureCategory,
+    httpStatus: number | null,
+    responseCode: string | null,
+    diagnosticMessage?: string,
+  ) {
     const message = category === "network"
       ? "PayDunya could not be reached."
       : category === "rejected"
@@ -51,6 +57,7 @@ export class PayDunyaInvoiceError extends Error {
     this.httpStatus = httpStatus;
     this.responseCode = responseCode;
     this.category = category;
+    this.diagnosticMessage = diagnosticMessage ?? message;
   }
 }
 
@@ -125,6 +132,49 @@ function payDunyaCheckoutUrlFromResponse(value: string) {
 
 export function safePayDunyaResponseCode(value: unknown) {
   return typeof value === "string" && /^[a-z\d_-]{1,32}$/i.test(value) ? value : null;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function safePayDunyaResponseMessage(
+  value: unknown,
+  config: ReturnType<typeof getConfig>,
+  order: CheckoutOrder,
+) {
+  if (typeof value !== "string" || !value.trim()) return "No provider reason was returned.";
+
+  let message = value.slice(0, 1_000);
+  const privateValues = [
+    config.masterKey,
+    config.privateKey,
+    config.token,
+    `${order.customer_first_name} ${order.customer_last_name}`.trim(),
+    order.order_number,
+    order.customer_first_name,
+    order.customer_last_name,
+    order.customer_email ?? "",
+    order.customer_phone,
+    order.customer_address ?? "",
+    order.customer_city ?? "",
+    order.customer_note ?? "",
+  ];
+  for (const privateValue of privateValues) {
+    if (privateValue.length > 1) {
+      message = message.replace(new RegExp(escapeRegExp(privateValue), "gi"), "[REDACTED]");
+    }
+  }
+
+  return message
+    .replace(/https?:\/\/[^\s"'<>]+/gi, "[URL REDACTED]")
+    .replace(/[\w.+-]+@[\w.-]+\.[A-Z]{2,}/gi, "[EMAIL REDACTED]")
+    .replace(/\b(token|authorization|api[-_ ]?key|secret|card|pan)\s*[:=]\s*[^\s,;]+/gi, "$1=[REDACTED]")
+    .replace(/(?:\+?\d[\d\s().-]{5,}\d)/g, "[NUMBER REDACTED]")
+    .replace(/\b(?:\d[ -]*?){13,19}\b/g, "[NUMBER REDACTED]")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 240);
 }
 
 export function safePayDunyaErrorName(error: unknown) {
@@ -212,7 +262,13 @@ export async function createPayDunyaCheckout(
 
   const responseCode = safePayDunyaResponseCode(payload.response_code);
   if (!response.ok || payload.response_code !== "00") {
-    throw new PayDunyaInvoiceError("rejected", response.status, responseCode);
+    const reason = payload.response_text ?? payload.errors?.description ?? payload.errors?.message ?? payload.description;
+    throw new PayDunyaInvoiceError(
+      "rejected",
+      response.status,
+      responseCode,
+      safePayDunyaResponseMessage(reason, config, order),
+    );
   }
 
   const responseUrl = payload.response_text?.trim() ?? "";

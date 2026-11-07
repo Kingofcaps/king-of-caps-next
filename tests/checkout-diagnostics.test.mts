@@ -174,7 +174,10 @@ test("journalise les échecs PayDunya, Supabase et stock sans données sensibles
   ];
   const { logs } = await captureCheckoutLogs(async () => {
     const failures: Array<{ event: string; error: Error }> = [
-      { event: "paydunya_invoice_creation_failed", error: new PayDunyaInvoiceError("rejected", 422, "54") },
+      {
+        event: "paydunya_invoice_creation_failed",
+        error: new PayDunyaInvoiceError("rejected", 200, "1003", "Aucun moyen disponible pour [EMAIL REDACTED]"),
+      },
       { event: "supabase_order_insert_failed", error: new SupabaseServerError(401, "PGRST303") },
       { event: "supabase_order_readback_failed", error: new SupabaseServerError(404, "PGRST205") },
       { event: "stock_reservation_failed", error: new SupabaseServerError(409, "23503") },
@@ -200,7 +203,9 @@ test("journalise les échecs PayDunya, Supabase et stock sans données sensibles
     "supabase_order_readback_failed",
     "stock_reservation_failed",
   ]);
-  assert.deepEqual(entries.map((entry) => entry.errorCode), ["54", "PGRST303", "PGRST205", "23503", "INSUFFICIENT_STOCK"]);
+  assert.deepEqual(entries.map((entry) => entry.errorCode), ["1003", "PGRST303", "PGRST205", "23503", "INSUFFICIENT_STOCK"]);
+  assert.equal(entries[0].httpStatus, 200);
+  assert.equal(entries[0].errorMessage, "Aucun moyen disponible pour [EMAIL REDACTED]");
   const serialized = JSON.stringify(entries);
   for (const sensitiveValue of sensitiveValues) assert.equal(serialized.includes(sensitiveValue), false);
 });

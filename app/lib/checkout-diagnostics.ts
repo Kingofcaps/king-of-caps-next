@@ -52,7 +52,7 @@ export function safeCheckoutErrorDetails(error: unknown) {
       errorCode: error.responseCode && error.responseCode !== "00"
         ? error.responseCode
         : `PAYDUNYA_${error.category.toUpperCase()}`,
-      errorMessage: error.message,
+      errorMessage: error.diagnosticMessage,
     };
   }
 

@@ -133,6 +133,26 @@ test("une erreur HTTP PayDunya est journalisée sans secret ni données client",
   assert.equal(error.message, "PayDunya rejected invoice creation.");
 });
 
+test("le code 1003 expose response_text expurgé sans modifier le message public", async () => {
+  const error = await createPayDunyaCheckout(checkoutOrder, "mobile_money", async () => Response.json({
+    response_code: "1003",
+    response_text: "Aucun canal pour Awa Mensah, awa@example.com, 97000000, 12 Rue des Casquettes; détails https://paydunya.com/invoice/private-token",
+    description: "Ne pas choisir description lorsque response_text existe.",
+    errors: { message: "Fallback errors message." },
+  }, { status: 200 })).catch((reason: unknown) => reason);
+
+  assert.ok(error instanceof PayDunyaInvoiceError);
+  assert.equal(error.httpStatus, 200);
+  assert.equal(error.responseCode, "1003");
+  assert.equal(error.category, "rejected");
+  assert.equal(error.message, "PayDunya rejected invoice creation.");
+  assert.match(error.diagnosticMessage, /Aucun canal pour/);
+  for (const sensitiveValue of ["Awa Mensah", "awa@example.com", "97000000", "12 Rue des Casquettes", "private-token"]) {
+    assert.equal(error.diagnosticMessage.includes(sensitiveValue), false);
+  }
+  assert.equal(error.diagnosticMessage.includes("description lorsque"), false);
+});
+
 test("une réponse non JSON de PayDunya est distinguée par son statut HTTP", async () => {
   const error = await createPayDunyaCheckout(checkoutOrder, "card", async () => new Response("donnée confidentielle", { status: 502 }))
     .catch((reason: unknown) => reason);
