@@ -16,6 +16,8 @@ export function productWhatsAppMessage(product: WhatsAppProduct, formattedPrice:
     "",
     `Produit : ${product.name}`,
     `Prix : ${formattedPrice}`,
+    "Mode de paiement : Paiement à la livraison",
+    "Je souhaite convenir des modalités de paiement directement avec KING OF CAPS.",
     `Lien du produit : ${productCanonicalUrl(product.id)}`,
   ].join("\n");
 }

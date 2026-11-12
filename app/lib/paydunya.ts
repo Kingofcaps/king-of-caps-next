@@ -85,6 +85,14 @@ export type PayDunyaConfirmation = {
 
 export const ONLINE_PAYMENT_UNAVAILABLE_MESSAGE = "Le paiement en ligne est temporairement indisponible. Choisissez le paiement à la livraison.";
 
+export function isPayDunyaOnlinePaymentsEnabled() {
+  return process.env.PAYDUNYA_ONLINE_PAYMENTS_ENABLED?.trim().toLowerCase() === "true";
+}
+
+export function isPayDunyaOnlinePaymentsAvailable() {
+  return isPayDunyaConfigured() && isPayDunyaOnlinePaymentsEnabled();
+}
+
 export function isPayDunyaConfigured() {
   return Boolean(
     process.env.PAYDUNYA_MASTER_KEY?.trim()
@@ -206,6 +214,10 @@ export async function createPayDunyaCheckout(
   paymentMethod: Extract<PaymentMethod, "mobile_money" | "card">,
   fetcher: typeof fetch = fetch,
 ) {
+  if (!isPayDunyaOnlinePaymentsEnabled()) {
+    throw new Error(ONLINE_PAYMENT_UNAVAILABLE_MESSAGE);
+  }
+
   const config = getConfig();
   let response: Response;
   try {

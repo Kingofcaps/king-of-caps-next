@@ -6,12 +6,13 @@ import {
   productWhatsAppOrderUrl,
 } from "../app/lib/product-whatsapp.ts";
 
-test("le message WhatsApp contient le produit, son prix et sa fiche canonique", () => {
+test("le message WhatsApp contient le produit, son prix, le mode de paiement et la fiche canonique", () => {
   const product = { id: "white-sox-123", name: "White Sox brodée" };
   const message = productWhatsAppMessage(product, "5 000 F");
 
   assert.match(message, /Produit : White Sox brodée/);
   assert.match(message, /Prix : 5 000 F/);
+  assert.match(message, /Mode de paiement : Paiement à la livraison/);
   assert.match(message, /Lien du produit : https:\/\/kingofcaps\.bj\/product\/white-sox-123/);
 
   const whatsappUrl = new URL(productWhatsAppOrderUrl(product, "5 000 F"));

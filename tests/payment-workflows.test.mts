@@ -11,6 +11,7 @@ beforeEach(() => {
   process.env.PAYDUNYA_PRIVATE_KEY = "private-key";
   delete process.env.PAYDUNYA_PUBLIC_KEY;
   process.env.PAYDUNYA_TOKEN = "application-token";
+  process.env.PAYDUNYA_ONLINE_PAYMENTS_ENABLED = "true";
 });
 
 afterEach(() => {
@@ -70,6 +71,14 @@ test("paiement à la livraison crée la commande, réserve le stock et notifie",
 
   assert.equal(result.kind, "cash_on_delivery");
   assert.deepEqual(calls, ["create", "stock", "notify"]);
+});
+
+test("la création d’une facture PayDunya est refusée quand les paiements en ligne sont suspendus", async () => {
+  process.env.PAYDUNYA_ONLINE_PAYMENTS_ENABLED = "false";
+  await assert.rejects(
+    () => createPayDunyaCheckout(checkoutOrder, "mobile_money", async () => new Response("ne doit pas être appelé", { status: 200 })),
+    /paiement en ligne est temporairement indisponible/i,
+  );
 });
 
 test("Mobile Money propose les canaux béninois documentés et conserve le total XOF", async () => {

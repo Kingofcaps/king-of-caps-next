@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   createPayDunyaCheckout,
   isPayDunyaConfigured,
+  isPayDunyaOnlinePaymentsEnabled,
   ONLINE_PAYMENT_UNAVAILABLE_MESSAGE,
 } from "@/app/lib/paydunya";
 import { notifyNewOrder, sendCustomerOrderConfirmation } from "@/app/lib/order-notifications";
@@ -134,6 +135,20 @@ export async function POST(request: Request) {
     });
 
     const isOnlinePayment = isOnlinePaymentMethod(body.paymentMethod);
+    if (isOnlinePayment && !isPayDunyaOnlinePaymentsEnabled()) {
+      logCheckoutDiagnostic({
+        correlationId,
+        event: "paydunya_configuration_failed",
+        paymentMethod,
+        httpStatus: 503,
+        errorCode: "PAYDUNYA_PAYMENTS_SUSPENDED",
+        errorMessage: "PayDunya online payments are temporarily suspended.",
+      });
+      return NextResponse.json(
+        { success: false, error: ONLINE_PAYMENT_UNAVAILABLE_MESSAGE },
+        { status: 503 },
+      );
+    }
     if (isOnlinePayment && !isPayDunyaConfigured()) {
       logCheckoutDiagnostic({
         correlationId,
